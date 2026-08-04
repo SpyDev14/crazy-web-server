@@ -128,12 +128,8 @@ long parse_num(const char *str, long *out) {
         current_char++;
     }
 
-memcpy
     return sparse_num(str, str_len, out);
 }
-
-struct Vec;
-
 
 
 int get_content_length(const char* req_buff, size_t req_buff_sz) {
