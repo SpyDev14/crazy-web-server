@@ -1,96 +1,181 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
 #include <sys/socket.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <unistd.h>
 #include <netinet/in.h>
-#include <termios.h>
+#include <string.h>
 #include <arpa/inet.h>
 
+#include "src/common.h"
+
 #define PORT 8080
-#define BUFFER_SIZE 4096
-#define CONNECTIONS_QUEUE_LEN 10
+#define CONN_QUEUE_SZ 10
+#define REQ_BUFF_SZ 4 * 1024
+#define RESP_BUFF_SZ 1024
 
-
-int disable_terminal_echo() {
-    struct termios t;
-    tcgetattr(STDIN_FILENO, &t);
-    t.c_lflag &= ~ECHO;
-    tcsetattr(STDIN_FILENO, TCSANOW, &t);
-    return 0;
-}
 
 int main() {
-    disable_terminal_echo();
-
-    struct sockaddr_in address;
-    address.sin_family = AF_INET;
-    address.sin_addr.s_addr = INADDR_ANY;
-    address.sin_port = htons(PORT);
+    struct sockaddr_in address = {
+        .sin_family = AF_INET,
+        .sin_addr.s_addr = INADDR_ANY,
+        .sin_port = htons(PORT)
+    };
 
     int server_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (server_fd == 0) {
-        perror("Socket creation failed\n");
-        exit(1);
+    if (server_fd == -1) {
+        perror("server socket creation failed\n");
+        return 1;
     }
 
-    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
-        perror("Bind failed\n");
-        exit(1);
+    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) == -1) {
+        perror("binding socket to address failed\n");
+        return 1;
     }
 
-    if (listen(server_fd, CONNECTIONS_QUEUE_LEN) < 0) {
-        perror("Listening failed\n");
-        exit(1);
+    if (listen(server_fd, CONN_QUEUE_SZ) == -1) {
+        perror("listening enable failed\n");
+        return 1;
     }
 
-    printf("Server start listen port %d\n", PORT);
     while (1) {
-        int addrsize = sizeof(address);
-        int client_fd = accept(
-            server_fd,
-            (struct sockaddr *)&address,
-            (socklen_t*)&addrsize
-        );
-
-        if (client_fd < 0) {
-            perror("Connection accept failed");
-            continue;
+        struct sockaddr_in req_addr;
+        int client_fd;
+        {
+            size_t req_addr_size = sizeof(req_addr);
+            client_fd = accept(server_fd, (struct sockaddr *)&req_addr, &req_addr_size);
         }
 
-        char request[BUFFER_SIZE] = {0};
-        ssize_t req_len = recv(client_fd, request, BUFFER_SIZE-1, 0);
-        printf("Received new request from: %s:%d (%zu bytes)\n",
-            inet_ntoa(address.sin_addr),
-            ntohs(address.sin_port),
-            req_len
-        );
-        if (req_len <= 0) {
-            printf("Request was empty\n");
+        char req_buff[REQ_BUFF_SZ];
+        ssize_t bytes_read = read(client_fd, req_buff, REQ_BUFF_SZ-1);
+        req_buff[REQ_BUFF_SZ-1] = '\0';
+
+        if (bytes_read == -1) {
+            perror("request read failed\n");
             close(client_fd);
             continue;
         }
 
-        char resp_body[] = (
-            "{\"ok\": true}"
-        );
+        if (bytes_read == 0) {
+            perror("receive empty request");
+            close(client_fd);
+            continue;
+        }
 
-        char response[BUFFER_SIZE] = {0};
-        snprintf(response, sizeof(response),
-            "HTTP/1.1 200 OK\n"
-            "Content-Length: %zu\n"
-            "Content-Type: application/json\n"
-            "\n"
-            "%s\n",
-            strlen(resp_body),
-            resp_body
+        printf("Receive %d bytes of request from %s:%d",
+            inet_ntoa(req_addr.sin_addr), ntons(req_addr.sin_port)
         );
-
-        send(client_fd, response, strlen(response), 0);
-        close(client_fd);
     }
 
-    close(server_fd);
-    printf("Server shutting down\n");
     return 0;
+}
+
+
+
+struct HTTPHeader {
+    char *name;
+    char *value;
+};
+
+struct HTTPRequest {
+    ARRAY(struct HTTPHeader, headers);
+    ARRAY(void, body);
+};
+
+struct HTTPResponse {
+    ARRAY(struct HTTPHeader, headers);
+    ARRAY(void, body);
+};
+
+struct HTTPResponse get_response(const struct HTTPRequest* request) {
+
+}
+
+// return code:
+// - 1 - success
+// - -1 - is not a number
+long sparse_num(const char *str, size_t str_len, long *out) {
+    long num = 0;
+    bool is_neg = False;
+    char *curr_char = str;
+
+    if (*curr_char == '-') {
+        is_neg = True;
+        curr_char++;
+    }
+
+    while (curr_char - str < str_len) {
+        if (*curr_char < '0' || *curr_char > '9') {
+            return -1;
+        }
+
+        num += (*curr_char - '0') * (curr_char - str - is_neg);
+        curr_char++;
+    }
+
+    num *= is_neg;
+    return 1;
+}
+
+// variant with str with null-terminator in end
+// return code:
+// - 1 - success
+// - -1 - is not a number
+long parse_num(const char *str, long *out) {
+    size_t str_len = 0;
+    char *current_char = str;
+    while (*current_char != '\0') {
+        str_len++;
+        current_char++;
+    }
+
+memcpy
+    return sparse_num(str, str_len, out);
+}
+
+struct Vec;
+
+
+
+int get_content_length(const char* req_buff, size_t req_buff_sz) {
+    char *content_len_header = strstr(req_buff, "Content-Length:");
+    int len;
+    {
+        char *num_start, *num_end;
+        {
+            char *curr = content_len_header;
+            while (*curr != ' ') {
+                curr++; //works because size of EN chars in UTF8 is one byte
+            }
+            num_start = curr;
+
+            while (*curr != '\r') {
+                curr++;
+            }
+            num_end = curr;
+        }
+
+        char *curr = num_start;
+        while (curr != num_end+1) {
+            size_t step = curr - num_start;
+            u_int8_t num;
+
+            switch (*curr) {
+                case '0': num = 0; break;
+                case '1': num = 1; break;
+                case '2': num = 2; break;
+                case '3': num = 3; break;
+                case '4': num = 4; break;
+                case '5': num = 5; break;
+                case '6': num = 6; break;
+                case '7': num = 7; break;
+                case '8': num = 8; break;
+                case '9': num = 9; break;
+                default: return -1;
+            }
+
+            len += num * (10 * step);
+        }
+
+        return len;
+    }
 }
