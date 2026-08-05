@@ -37,17 +37,22 @@ int main() {
         return 1;
     }
 
-    while (1) {
+    while (true) {
         struct sockaddr_in req_addr;
         int client_fd;
         {
-            size_t req_addr_size = sizeof(req_addr);
-            client_fd = accept(server_fd, (struct sockaddr *)&req_addr, &req_addr_size);
+            size_t addr_size = sizeof(req_addr);
+            client_fd = accept(server_fd, (struct sockaddr *)&req_addr, &addr_size);
         }
 
         char req_buff[REQ_BUFF_SZ];
-        ssize_t bytes_read = read(client_fd, req_buff, REQ_BUFF_SZ-1);
-        req_buff[REQ_BUFF_SZ-1] = '\0';
+        ssize_t bytes_read = read(client_fd, req_buff, REQ_BUFF_SZ);
+        if (bytes_read == REQ_BUFF_SZ) {
+            char *inheap_req_buff = malloc(REQ_BUFF_SZ);
+        }
+        else {
+            req_buff[bytes_read+1] = '\0';
+        }
 
         if (bytes_read == -1) {
             perror("request read failed\n");
@@ -64,6 +69,17 @@ int main() {
         printf("Receive %d bytes of request from %s:%d",
             inet_ntoa(req_addr.sin_addr), ntons(req_addr.sin_port)
         );
+
+        void *body_buff
+        /*
+        struct HTTPRequest request = {
+            .requester = {
+                .ip = req_addr.sin_addr.s_addr,
+                .port = htons(req_addr.sin_port),
+            },
+            .
+        };
+        */
     }
 
     return 0;
@@ -76,9 +92,17 @@ struct HTTPHeader {
     char *value;
 };
 
+struct HTTPRequesterInfo {
+    in_addr_t ip;
+    in_port_t port;
+};
+
 struct HTTPRequest {
+    char *method;
+    char *url;
     ARRAY(struct HTTPHeader, headers);
     ARRAY(void, body);
+    struct HTTPRequesterInfo requester;
 };
 
 struct HTTPResponse {
@@ -87,19 +111,19 @@ struct HTTPResponse {
 };
 
 struct HTTPResponse get_response(const struct HTTPRequest* request) {
-
+    NULL;
 }
 
 // return code:
 // - 1 - success
 // - -1 - is not a number
-long sparse_num(const char *str, size_t str_len, long *out) {
+int sparse_num(const char *str, size_t str_len, long *out) {
     long num = 0;
-    bool is_neg = False;
+    bool is_neg = false;
     char *curr_char = str;
 
     if (*curr_char == '-') {
-        is_neg = True;
+        is_neg = true;
         curr_char++;
     }
 
@@ -120,7 +144,7 @@ long sparse_num(const char *str, size_t str_len, long *out) {
 // return code:
 // - 1 - success
 // - -1 - is not a number
-long parse_num(const char *str, long *out) {
+int parse_num(const char *str, long *out) {
     size_t str_len = 0;
     char *current_char = str;
     while (*current_char != '\0') {
