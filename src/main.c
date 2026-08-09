@@ -7,6 +7,7 @@
 #include <arpa/inet.h>
 
 #include "src/collections.h"
+#include "src/logging.h"
 #include "src/common.h"
 
 #define PORT 8080
@@ -39,28 +40,39 @@ int main() {
     }
 
     while (true) {
-        struct sockaddr_in req_addr;
+        struct sockaddr_in client_addr;
         int client_fd;
         {
-            size_t addr_size = sizeof(req_addr);
-            client_fd = accept(server_fd, (struct sockaddr *)&req_addr, &addr_size);
+            size_t addr_size = sizeof(client_addr);
+            client_fd = accept(server_fd, (struct sockaddr *)&client_addr, &addr_size);
+        }
+
+        struct HTTPRequest request;
+        {
+            struct read_http_request_Result res = read_http_request(client_fd, &client_addr);
+            switch (res.code) {
+                case read_http_request_Success:
+                    break;
+                case read_http_request_ClientCloseConnection:
+                    log(L_WARNING, "Receive empty request");
+                    // NOTE: maybe return response with an error?
+                    close(client_fd);
+                    continue;
+                case read_http_request_IOReadError:
+                    log(L_ERROR, "read %s return error", nameof(client_fd));
+                    // NOTE: maybe return response with an error?
+                    close(client_fd);
+                    continue;
+                default:
+                    break;
+            }
         }
 
         printf("Receive %d bytes of request from %s:%d",
             0,
-            inet_ntoa(req_addr.sin_addr),
-            ntons(req_addr.sin_port)
+            inet_ntoa(client_addr.sin_addr),
+            ntons(client_addr.sin_port)
         );
-
-        /*
-        struct HTTPRequest request = {
-            .requester = {
-                .ip = req_addr.sin_addr.s_addr,
-                .port = htons(req_addr.sin_port),
-            },
-            .
-        };
-        */
     }
 
     return 0;
@@ -81,14 +93,15 @@ struct HTTPRequesterInfo {
 struct HTTPRequest {
     char *method;
     char *url;
-    ARRAY(struct HTTPHeader, headers);
-    ARRAY(void, body);
+    const ARRAY(struct HTTPHeader, headers);
+    const ARRAY(void, body);
     struct HTTPRequesterInfo requester;
 };
 
 struct HTTPResponse {
-    ARRAY(struct HTTPHeader, headers);
-    ARRAY(void, body);
+    byte code;
+    const ARRAY(struct HTTPHeader, headers);
+    const ARRAY(void, body);
 };
 
 
@@ -101,42 +114,63 @@ struct read_http_request_ReturnValue {
 DEF_RESULT(read_http_request, struct read_http_request_ReturnValue);
 enum read_http_request_ResCode {
     read_http_request_Success,
-    read_http_request_EmptyRequest,
+    // read return 0 (EOF)
+    read_http_request_ClientCloseConnection,
+    // read return -1
     read_http_request_IOReadError,
-    read_http_request_RequestHaveNotContentLength,
+    // Request not contain Client-Length header
+    read_http_request_RequestWithoutContentLength,
+    // Request HTTP version is not supported
+    read_http_request_HTTPVersionNotSupported,
+    // alloc return NULL
+    read_http_request_MemoryOverflow,
 };
 
-struct read_http_request_Result read_http_request(const int client_fd) {
+struct read_http_request_Result read_http_request(const int client_fd, const struct sockaddr_in *client_addr) {
     struct Vec objects_to_free = new_Vec(sizeof(void *));
-    struct HTTPRequest request;
     size_t bytes_read_total = 0;
+    struct HTTPRequest request;
+    // WARNING: ip в request должен не быть строкой, я дурак :(
+    // А для thread-safe преобразования есть ntop
+    {
+        // 1 for null-terminator
+        ssize_t ip_str_len = 1 + strlen(inet_ntoa(client_addr->sin_addr));
+        char *ip_str = malloc(ip_str_len);
+        if (ip_str == NULL) {
+            return ERR(read_http_request, read_http_request_MemoryOverflow);
+        }
+        Vec_push(&objects_to_free, ip_str);
 
+        // not use previous result because inet_ntoa not thread-safe
+        memcpy(ip_str, inet_ntoa(client_addr->sin_addr), ip_str_len);
+    }
+
+    // how much bytes need to skip for get access to first body byte
+    // in bytes with "\r\n\r\n";
+    // 0 == is not initted;
+    size_t head_part_size = 0;
+
+    // 1. Receive and parse head (method, url, check http version)
+    // 2. Get Content-Length from then
+    // 3. Receive body by CL
     struct Vec headers = new_Vec(sizeof(struct HTTPHeader));
-    struct Vec buffer = new_Vec(1);
     while(true) {
-        // 1. Receive and parse headers
-        // 2. Get Content-Length from then
-        // 3. Receive
-        ssize_t bytes_read = 0;
+        ssize_t bytes_read;
         char buff[REQ_BUFF_SIZE] = {0};
-        bytes_read = read(client_fd, buff, REQ_BUFF_SIZE);
-        bytes_read_total += bytes_read;
 
-        if (bytes_read == -1) {
-            perror("request read failed\n");
-            close(client_fd);
-            return ERR(read_http_request, read_http_request_IOReadError);
+        bytes_read = read(client_fd, buff, REQ_BUFF_SIZE);
+        switch (bytes_read) {
+            case -1: return ERR(read_http_request, read_http_request_IOReadError);
+            case 0:  return ERR(read_http_request, read_http_request_ClientCloseConnection);
         }
 
-        Vec_push_several(&buffer, buff, bytes_read);
-    }
+        bytes_read_total += bytes_read;
 
-    if (bytes_read == 0) {
-        perror("receive empty request");
-        close(client_fd);
-        return ERR(read_http_request, read_http_request_EmptyRequest);
-    }
+        // Parsing
+        if (head_part_size == 0) { // Head part is not parsed already
 
+        }
+    }
 
     struct read_http_request_ReturnValue v = (struct read_http_request_ReturnValue){
         .request = request,
@@ -148,45 +182,4 @@ struct read_http_request_Result read_http_request(const int client_fd) {
 
 struct HTTPResponse get_response(const struct HTTPRequest* request) {
     ;
-}
-
-DEF_RESULT(parse_num, long);
-enum parse_num_ResCode {
-    parse_num_Success,
-    parse_num_IsNotANumber,
-};
-
-// variant for not null-terminated str
-struct parse_num_Result sparse_num(const char *str, size_t str_len) {
-    long num = 0;
-    bool is_neg = false;
-    char *curr_char = str;
-
-    if (*curr_char == '-') {
-        is_neg = true;
-        curr_char++;
-    }
-
-    while (curr_char - str < str_len) {
-        if (*curr_char < '0' || *curr_char > '9') {
-            return ERR(parse_num, parse_num_IsNotANumber);
-        }
-
-        num += (*curr_char - '0') * (curr_char - str - is_neg);
-        curr_char++;
-    }
-
-    num *= is_neg;
-    return OK(parse_num, num);
-}
-
-struct parse_num_Result parse_num(const char *str) {
-    size_t str_len = 0;
-    char *current_char = str;
-    while (*current_char != '\0') {
-        str_len++;
-        current_char++;
-    }
-
-    return sparse_num(str, str_len);
 }

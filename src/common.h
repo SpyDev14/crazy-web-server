@@ -8,6 +8,8 @@ typedef enum {
     false = 0,
 } bool;
 
+#define nameof(some) "some"
+
 typedef signed   char   sbyte;
 typedef unsigned char   byte;
 typedef unsigned short  ushort;
@@ -23,6 +25,8 @@ typedef unsigned long   ulong;
     TValue value;\
 }\
 
+// Need specify full code (like "read_http_request_IOReadError" instead just "IOReadError")
+// for allow IDE refactoring actions (like renaming)
 #define ERR(func_name, code_) (struct func_name##_Result){.code = code_}
 #define OK(func_name, value_) (struct func_name##_Result){.code = func_name##_Success, .value = value_};
 
