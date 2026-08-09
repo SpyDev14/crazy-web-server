@@ -60,10 +60,6 @@ static inline size_t get_Vec_count(const struct Vec *self) {
     return self->_count;
 }
 
-// Return pointer to allocated copied buffer
-// Return NULL on allocation failed
-void *get_Vec_buffer_copy(const struct Vec *self);
-
 /* Read-only Methods */
 DEF_RESULT(Vec_get, void*);
 enum Vec_get_ResCode {

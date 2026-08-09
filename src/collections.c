@@ -32,16 +32,6 @@ static inline size_t _get_Vec_buffer_size(const struct Vec *self) {
     return self->_capacity * self->_item_size;
 }
 
-void *get_Vec_buffer_copy(const struct Vec *self) {
-    size_t buff_sz = _get_Vec_buffer_size(self);
-    void *new_buff = malloc(buff_sz);
-    if (new_buff == NULL)
-    return NULL;
-
-    memcpy(new_buff, self->_buffer, buff_sz);
-    return new_buff;
-}
-
 
 /* Read-only methods */
 struct Vec_get_Result Vec_get(const struct Vec *self, size_t i) {
