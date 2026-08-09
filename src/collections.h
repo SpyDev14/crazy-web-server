@@ -1,45 +1,88 @@
 #pragma once
 #include <stdlib.h>
+
 #include "src/common.h"
+#include "src/generic.h"
 
-
+#if FALSE
+/* Iterator def */
 struct Iterator {
     size_t item_size;
 };
+
 struct IterationStep {
+    // NULL if exhausted
+    void *item;
     bool is_exhausted;
 };
+
 struct IterationStep *next(struct Iterator *self);
 
+struct Iterator Vec_iter(const struct Vec *self);
+#endif
 
 
+/* Vec def */
 struct Vec {
     size_t _item_size;
-    size_t _items_count;
+    size_t _count;
     void *_buffer;
     // Current capacity in items
     size_t _capacity;
     // Prevent use-after-free;
     bool _is_destructed;
-};
-
-enum VecResult {
-    VecResult_Success,
-    VecResult_Destructed,
-    VecResult_MemoryOverflow,
+    bool _buffer_need_free;
 };
 
 
-struct Vec new_Vec(size_t item_size);
-struct Vec new_Vec_with_start_capacity(size_t item_size, size_t capacity);
-// Free heap mem, mark Vec as destructed
-void del_Vec(struct Vec *self);
+/* Special funcs */
+// Given buffer can be NULL
+static inline struct Vec new_Vec_with_buffer(size_t item_size, void *buffer, size_t capacity, bool need_free) {
+    return (struct Vec) {
+        ._item_size = item_size,
+        ._count = 0,
+        ._buffer = buffer,
+        ._capacity = capacity,
+        ._buffer_need_free = need_free,
+        ._is_destructed = false,
+    };
+}
 
-void Vec_append(struct Vec *self, void* item);
-struct Iterator iter_Vec(const struct Vec *self);
-// Return ref to item in Vec
-const void *Vec_get(const struct Vec *self, size_t i);
-// Return ref to item in Vec.
-// Special variant for explicit items mutation
-void *Vec_get_for_change(const struct Vec *self, size_t i);
-size_t Vec_count(const struct Vec *self);
+static inline struct Vec new_Vec(size_t item_size) {
+    return new_Vec_with_buffer(item_size, NULL, 0, false);
+}
+
+// Free allocated mem, mark Vec as destructed
+void destruct_Vec(struct Vec *self);
+
+/* Properties */
+static inline size_t get_Vec_count(const struct Vec *self) {
+    return self->_count;
+}
+
+// Return pointer to allocated copied buffer
+// Return NULL on allocation failed
+void *get_Vec_buffer_copy(const struct Vec *self);
+
+/* Read-only Methods */
+DEF_RESULT(Vec_get, void*);
+enum Vec_get_ResCode {
+    Vec_get_Success,
+    Vec_get_IsDestructed,
+    // Also returned if not initted, because it's equivalent zero size
+    Vec_get_IndexOutOfBounds,
+};
+
+struct Vec_get_Result Vec_get(const struct Vec *self, size_t i);
+
+// Allocate str in heap by malloc, need free. Return NULL if allocate failed.
+DEF_REPR_HEAD(Vec, struct);
+
+/* Mutate methods */
+enum Vec_push_ResCode {
+    Vec_push_Success,
+    Vec_push_IsDestructed,
+    Vec_push_MemoryOverflow,
+};
+enum Vec_push_ResCode Vec_push(struct Vec *self, void* item);
+enum Vec_push_ResCode Vec_push_several(struct Vec *self, void **items, size_t items_count);
