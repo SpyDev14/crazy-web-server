@@ -1,6 +1,8 @@
 CC := gcc
-DEBUG_FLAGS := -g -O0 -DDEBUG
-RELEASE_FLAGS := -O2 -DNDEBUG
+
+BASE_FLAGS = -Wstrict-prototypes -Wall -Wextra
+DEBUG_FLAGS := $(BASE_FLAGS) -g -O0 -DDEBUG
+RELEASE_FLAGS := $(BASE_FLAGS) -O2 -DNDEBUG
 
 # По умолчанию debug, можно переопределить через make MODE=release
 MODE ?= debug

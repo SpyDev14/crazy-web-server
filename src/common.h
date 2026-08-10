@@ -2,13 +2,17 @@
 
 #define ARRAY(T, name) T *name; size_t name##_len;
 
-
+/*
+Doesn't need after use C23 standard instead C17 (selected as
+default in IDE; but dont known clearly why gcc successfully
+compile it in C23 (gcc default) with my own bool)
 typedef enum {
     true = 1,
     false = 0,
 } bool;
+*/
 
-#define nameof(some) "some"
+#define nameof(any) #any
 
 typedef signed   char   sbyte;
 typedef unsigned char   byte;
@@ -25,9 +29,10 @@ typedef unsigned long   ulong;
     TValue value;\
 }\
 
-// Need specify full code (like "read_http_request_IOReadError" instead just "IOReadError")
-// for allow IDE refactoring actions (like renaming)
-#define ERR(func_name, code_) (struct func_name##_Result){.code = code_}
+// Set code only
+#define ERR(func_name, code_) (struct func_name##_Result){.code = func_name##_##code_}
+// For union ResultValue-s with error data, like IOReadErrorData
+#define EXTERR(func_name, code_, data) (struct func_name##_Result){.code = func_name##_##code_, .value = {.code_ = data}}
 #define OK(func_name, value_) (struct func_name##_Result){.code = func_name##_Success, .value = value_};
 
 

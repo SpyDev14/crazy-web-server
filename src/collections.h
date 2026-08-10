@@ -1,5 +1,6 @@
 #pragma once
 #include <stdlib.h>
+#include <assert.h>
 
 #include "src/common.h"
 #include "src/generic.h"
@@ -38,6 +39,7 @@ struct Vec {
 /* Special funcs */
 // Given buffer can be NULL
 static inline struct Vec new_Vec_with_buffer(size_t item_size, void *buffer, size_t capacity, bool need_free) {
+    assert(ROUND_UP_TO_8(capacity) == capacity);
     return (struct Vec) {
         ._item_size = item_size,
         ._count = 0,
@@ -71,8 +73,10 @@ enum Vec_get_ResCode {
 
 struct Vec_get_Result Vec_get(const struct Vec *self, size_t i);
 
-// Allocate str in heap by malloc, need free. Return NULL if allocate failed.
+// You can known need buffer length at comp-time by `REPR_LEN`
+// macro (`REPR_LEN` + 1 for null-terminator)
 DEF_REPR_HEAD(Vec, struct);
+#define VEC_REPR_LEN REPR_LEN(struct Vec)
 
 /* Mutate methods */
 enum Vec_push_ResCode {
@@ -81,4 +85,4 @@ enum Vec_push_ResCode {
     Vec_push_MemoryOverflow,
 };
 enum Vec_push_ResCode Vec_push(struct Vec *self, void* item);
-enum Vec_push_ResCode Vec_push_several(struct Vec *self, void **items, size_t items_count);
+enum Vec_push_ResCode Vec_push_several(struct Vec *self, void *items[], size_t items_count);

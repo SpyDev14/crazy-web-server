@@ -12,13 +12,13 @@
 /* Special funcs */
 void destruct_Vec(struct Vec *self) {
     if (self->_is_destructed) {
-        char *repr = Vec_repr(self);
+        char repr[VEC_REPR_LEN + 1];
+        Vec_repr(self, repr, sizeof(repr));
         log(L_ERROR, "Vec %p is destructed already\n", (void *)self);
-        free(repr);
         return;
     }
 
-    if (self->_buffer != NULL && self->_buffer_need_free) {
+    if (self->_buffer_need_free && self->_buffer != NULL) {
         free(self->_buffer);
     }
 
@@ -36,10 +36,10 @@ static inline size_t _get_Vec_buffer_size(const struct Vec *self) {
 /* Read-only methods */
 struct Vec_get_Result Vec_get(const struct Vec *self, size_t i) {
     if (self->_is_destructed) {
-        return ERR(Vec_get, Vec_get_IsDestructed);
+        return ERR(Vec_get, IsDestructed);
     }
     if (self->_count < i) {
-        return ERR(Vec_get, Vec_get_IndexOutOfBounds);
+        return ERR(Vec_get, IndexOutOfBounds);
     }
 
     void *item_ptr = self->_buffer + (self->_item_size * i);
@@ -88,10 +88,10 @@ enum Vec_push_ResCode Vec_push(struct Vec *self, void* item) {
     return Vec_push_Success;
 }
 
-enum Vec_push_ResCode Vec_push_several(struct Vec *self, void **items, size_t items_count) {
+enum Vec_push_ResCode Vec_push_several(struct Vec *self, void *items[], size_t items_count) {
     // Will be reworked
     for (size_t i = 0; i < items_count; i++) {
-        int res = Vec_push(self, items[i * self->_item_size]);
+        auto res = Vec_push(self, items[i * self->_item_size]);
         if (res != Vec_push_Success) return res;
     }
 

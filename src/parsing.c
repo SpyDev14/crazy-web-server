@@ -15,7 +15,7 @@ struct parse_num_Result sparse_num(const char *str, size_t str_len) {
 
     while (curr_char - str < str_len) {
         if (*curr_char < '0' || *curr_char > '9') {
-            return ERR(parse_num, parse_num_IsNotANumber);
+            return ERR(parse_num, IsNotANumber);
         }
 
         num += (*curr_char - '0') * (curr_char - str - is_neg);
