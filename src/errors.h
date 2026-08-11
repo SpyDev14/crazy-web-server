@@ -3,5 +3,5 @@
 
 
 struct IOReadErrorData {
-    size_t error_code;
+    int error_code;
 };

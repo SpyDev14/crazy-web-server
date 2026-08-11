@@ -23,13 +23,14 @@
 // You can known need buffer length at comp-time by `REPR_LEN`
 // macro (`REPR_LEN` + 1 for null-terminator)
 #define DEF_REPR_HEAD(type_name, type_prefix) \
-size_t type_name##_repr(const type_prefix type_name *self, char *out[], size_t out_len)\
+int type_name##_repr(const type_prefix type_name *self, char out[], size_t out_len)\
 //     ^^^^^^^^^^^^^^^^
 // Prefix need because need separated name for generate func-name (like "Vec_repr")
 
 #define DEF_REPR_IMPL(type_name, type_prefix) \
 DEF_REPR_HEAD(type_name, type_prefix) { \
     char fmt[] = __REPR_FMT_FOR(type_name, type_prefix); \
-    char *sep = #type_prefix != "" ? " " : ""; \
+    char *sep = *#type_prefix == '\0' ? "" : " "; \
     return snprintf(out, out_len, fmt, sep, self); \
 }\
+//

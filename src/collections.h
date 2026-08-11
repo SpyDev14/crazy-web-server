@@ -63,13 +63,13 @@ static inline size_t get_Vec_count(const struct Vec *self) {
 }
 
 /* Read-only Methods */
-DEF_RESULT(Vec_get, void*);
 enum Vec_get_ResCode {
     Vec_get_Success,
     Vec_get_IsDestructed,
     // Also returned if not initted, because it's equivalent zero size
     Vec_get_IndexOutOfBounds,
 };
+DEF_RESULT(Vec_get, void*);
 
 struct Vec_get_Result Vec_get(const struct Vec *self, size_t i);
 
@@ -85,4 +85,4 @@ enum Vec_push_ResCode {
     Vec_push_MemoryOverflow,
 };
 enum Vec_push_ResCode Vec_push(struct Vec *self, void* item);
-enum Vec_push_ResCode Vec_push_several(struct Vec *self, void *items[], size_t items_count);
+enum Vec_push_ResCode Vec_push_several(struct Vec *self, void *items, size_t items_count);

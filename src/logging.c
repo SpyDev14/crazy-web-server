@@ -2,6 +2,7 @@
 #include <stdarg.h>
 #include <time.h>
 
+#include "src/console/ansi.h"
 #include "src/common.h"
 #include "src/logging.h"
 
@@ -16,6 +17,16 @@ const char *LoggingLevel_to_string(enum LoggingLevel self) {
         default:        return "UNKNOWN";
     }
 }
+const char *LoggingLevel_to_color(enum LoggingLevel self) {
+    switch (self) {
+        case L_DEBUG:   return ANSI_FORE_BLUE;
+        case L_INFO:    return ANSI_FORE_CYAN;
+        case L_WARNING: return ANSI_FORE_YELLOW;
+        case L_ERROR:   return ANSI_FORE_RED;
+        case L_FATAL:   return ANSI_FORE_MAGENTA;
+        default:        return "";
+    }
+}
 
 void vlog(enum LoggingLevel level, const char *fmt, va_list args) {
     char time_str[64] = {0};
@@ -25,8 +36,10 @@ void vlog(enum LoggingLevel level, const char *fmt, va_list args) {
         strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S %z", &tm);
     }
 
-    fprintf(stderr, "[%s] %s: ",
+    fprintf(stderr, "[%s%s%s] %s: ",
+        LoggingLevel_to_color(level),
         LoggingLevel_to_string(level),
+        ANSI_FORE_RESET,
         time_str
     );
     vfprintf(stderr, fmt, args);

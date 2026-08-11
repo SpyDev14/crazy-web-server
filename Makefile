@@ -1,7 +1,7 @@
 CC := gcc
 
-BASE_FLAGS = -Wstrict-prototypes -Wall -Wextra
-DEBUG_FLAGS := $(BASE_FLAGS) -g -O0 -DDEBUG
+BASE_FLAGS = -I. -Wall -Wextra -Wstrict-prototypes -Wno-builtin-declaration-mismatch
+DEBUG_FLAGS := $(BASE_FLAGS) -g -O0 -DDEBUG -Wno-unused
 RELEASE_FLAGS := $(BASE_FLAGS) -O2 -DNDEBUG
 
 # По умолчанию debug, можно переопределить через make MODE=release

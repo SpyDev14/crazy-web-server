@@ -12,40 +12,54 @@
 #include "src/logging.h"
 #include "src/errors.h"
 #include "src/common.h"
+#include "src/http.h"
 
-
-#define PORT 8080
-#define CONN_QUEUE_SZ 10
 #define REQ_READ_BUFF_SIZE 4 * KB
-#define RESP_BUFF_SZ  4 * KB
+#define RESP_BUFF_SZ 4 * KB
+
+#define DEFAULT_PORT 8080
+#define DEFAULT_CONN_QUEUE_SZ 10
 
 
-struct RunParams {
-    ushort port;
+struct Config {
+    ushort PORT;
+    ushort CONNECTION_QUEUE_SIZE;
 };
 
+struct Config parse_config_from_run_args(int argc, char *argv[]) {
+    // Does nothing now
+    struct Config conf = {
+        .CONNECTION_QUEUE_SIZE = DEFAULT_CONN_QUEUE_SZ,
+        .PORT = DEFAULT_PORT,
+    };
+
+    return conf;
+}
+
 int main(int argc, char *argv[]) {
+    struct Config conf = parse_config_from_run_args(argc, argv);
+
     struct sockaddr_in address = {
         .sin_family = AF_INET,
         .sin_addr.s_addr = INADDR_ANY,
         // network await numbers in Big-Endian, x86 works with Little-Endian
         // hton -> Host to Network
-        .sin_port = htons(PORT)
+        .sin_port = htons(conf.PORT)
     };
 
     int server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (server_fd == -1) {
-        perror("server socket creation failed\n");
+        log(L_FATAL, "server socket creation failed\n");
         return 1;
     }
 
     if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) == -1) {
-        perror("binding socket to address failed\n");
+        log(L_FATAL, "binding socket to address failed\n");
         return 1;
     }
 
-    if (listen(server_fd, CONN_QUEUE_SZ) == -1) {
-        perror("listening enable failed\n");
+    if (listen(server_fd, conf.CONNECTION_QUEUE_SIZE) == -1) {
+        log(L_FATAL, "listening enable failed\n");
         return 1;
     }
 
@@ -56,7 +70,7 @@ int main(int argc, char *argv[]) {
         struct sockaddr_in client_addr;
         int client_fd;
         {
-            size_t addr_size = sizeof(client_addr);
+            socklen_t addr_size = sizeof(client_addr);
             client_fd = accept(server_fd, (struct sockaddr *)&client_addr, &addr_size);
         }
 
@@ -66,6 +80,8 @@ int main(int argc, char *argv[]) {
             bool need_continue = false;
             struct read_http_request_Result res = read_http_request(client_fd, &client_addr, &objects_to_free);
             switch (res.code) {
+                // TODO: return HTTP responses with an error
+                case read_http_request_Success: break;
                 case read_http_request_ClientCloseConnection:
                     log(L_INFO, "Client close connection before response was read");
                     close(client_fd);
@@ -82,14 +98,29 @@ int main(int argc, char *argv[]) {
                     close(client_fd);
                     need_continue = true;
                     break;
+                case read_http_request_RequestInvalid:
+                    log(L_WARNING, "Received request is not valid HTTP");
+                    close(client_fd);
+                    need_continue = true;
+                    break;
+                case read_http_request_MemoryOverflow:
+                    // Return 500 here
+                    log(L_ERROR, "Memory overflow");
+                    close(client_fd);
+                    need_continue = true;
+                    break;
             }
+            assert(res.code == read_http_request_Success);
 
-            // Max len of ip as str is: 15 + null-terminator
-            char ip_as_str[16] = {0};
+            char ip_as_str[INET_ADDRSTRLEN];
             inet_ntop(AF_INET, &client_addr.sin_addr, ip_as_str, sizeof(ip_as_str));
-            log(L_INFO, "%s %s %s from %s:%d (%d bytes)",
+            char http_version_as_str[HTTP_VERSION_STR_LEN];
+            HTTPVersion_to_string(request.http_version, http_version_as_str, sizeof(http_version_as_str));
+            // METHOD URI VERSION from IP:PORT (BYTES bytes)
+            log(L_INFO, "%s %s %s from %s:%d (%zu bytes)",
                 request.method,
                 request.uri,
+                http_version_as_str,
                 res.value.Success.bytes_read_total,
                 ip_as_str,
                 ntohs(client_addr.sin_port) // Network to Host (Big Endian -> Little Endian)
@@ -102,126 +133,30 @@ int main(int argc, char *argv[]) {
         }
 
         cleanup_allocated_memory(&objects_to_free);
-        // OTF destructed now
-        // In Rust this get ownership on this Vec and we cant get access to them here
     }
 
     return 0;
 }
 
 // Also destruct given Vec
-// Vec: `<Item = void *>`
+// @param objects_to_free: `<Item = void *>`
 void cleanup_allocated_memory(struct Vec *objects_to_free) {
-    for (size_t i = 0; i < get_Vec_count(&objects_to_free); i++) {
+    for (size_t i = 0; i < get_Vec_count(objects_to_free); i++) {
         void *item;
         {
-            struct Vec_get_Result res = Vec_get(&objects_to_free, i);
+            struct Vec_get_Result res = Vec_get(objects_to_free, i);
             assert(res.code == Vec_get_Success);
             item = res.value;
         }
         free(item);
     }
-    destruct_Vec(&objects_to_free);
-}
 
-
-struct HTTPHeader {
-    const char *name;
-    const char *value;
-};
-
-struct HTTPRequesterInfo {
-    in_addr_t ip;
-    in_port_t port;
-};
-
-struct HTTPRequest {
-    const char *method;
-    const char *uri; // Uri is Url-s + Urn-s, Urn commonly not used (Urn - Unique Resource Number, like UUID)
-    const ARRAY(struct HTTPHeader, headers);
-    const ARRAY(void, body);
-    const struct HTTPRequesterInfo requester;
-};
-
-struct HTTPResponse {
-    byte code;
-    const ARRAY(struct HTTPHeader, headers);
-    const ARRAY(void, body);
-};
-
-struct read_http_request_SuccessReturnValue {
-    struct HTTPRequest request;
-    size_t bytes_read_total;
-};
-union read_http_request_ReturnValue {
-    struct read_http_request_SuccessReturnValue Success;
-    struct IOReadErrorData IOReadError;
-};
-
-DEF_RESULT(read_http_request, union read_http_request_ReturnValue);
-enum read_http_request_ResCode {
-    read_http_request_Success,
-    // read return 0 (EOF)
-    read_http_request_ClientCloseConnection,
-    // read return -1
-    read_http_request_IOReadError,
-    // Request valid by HTTP protocol, but not contain Client-Length header
-    read_http_request_RequestNotContainsContentLength,
-    // Request HTTP version is not supported
-    read_http_request_HTTPVersionNotSupported,
-    // any alloc return NULL
-    read_http_request_MemoryOverflow,
-    // Request violate HTTP protocol
-    read_http_request_RequestInvalid,
-};
-
-struct read_http_request_Result read_http_request(
-    const int client_fd,
-    const struct sockaddr_in *client_addr,
-    struct Vec *objects_to_free
-) {
-    size_t bytes_read_total = 0;
-    struct HTTPRequest request = {
-        .requester = {
-            .ip = client_addr->sin_addr.s_addr,
-            .port = client_addr->sin_port
-        },
-    };
-
-    // how much bytes need to skip for get access to first body byte
-    // in bytes with "\r\n\r\n";
-    // 0 == is not initted;
-    size_t head_part_size = 0;
-
-    // 1. Receive and parse head (method, uri, check http version)
-    // 2. Get Content-Length from then
-    // 3. Receive body by CL
-    struct Vec headers = new_Vec(sizeof(struct HTTPHeader));
-    byte __vec_buff[REQ_READ_BUFF_SIZE];
-    struct Vec buffer = new_Vec_with_buffer(1, __vec_buff, REQ_READ_BUFF_SIZE, false);
-    while(true) {
-        ssize_t bytes_read;
-        char buff[REQ_READ_BUFF_SIZE] = {0};
-
-        bytes_read = read(client_fd, buff, REQ_READ_BUFF_SIZE);
-        switch (bytes_read) {
-            case -1: return EXTERR(read_http_request, IOReadError, {.error_code = errno});
-            case 0:  return ERR(read_http_request, ClientCloseConnection);
-        }
-
-        bytes_read_total += bytes_read;
-        Vec_push_several(&buffer, buff, bytes_read);
-    }
-
-    union read_http_request_ReturnValue value = {
-        .Success = (struct read_http_request_SuccessReturnValue){
-            .request = request,
-            .bytes_read_total = bytes_read_total,
-        }
-    };
-    return OK(read_http_request, value);
+    // TODO: add Vec method for clean without free (just drop all items)
+    destruct_Vec(objects_to_free);
 }
 
 struct HTTPResponse get_response(const struct HTTPRequest* request) {
-    ;
+    return (struct HTTPResponse) {
+        .code = 200,
+    };
 }

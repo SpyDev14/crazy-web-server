@@ -2,11 +2,8 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "src/common.h"
-#include "src/generic.h"
 #include "src/logging.h"
 #include "./collections.h"
-#include "collections.h"
 
 
 /* Special funcs */
@@ -88,11 +85,16 @@ enum Vec_push_ResCode Vec_push(struct Vec *self, void* item) {
     return Vec_push_Success;
 }
 
-enum Vec_push_ResCode Vec_push_several(struct Vec *self, void *items[], size_t items_count) {
-    // Will be reworked
+enum Vec_push_ResCode Vec_push_several(struct Vec *self, void *items, size_t items_count) {
+    if (self->_is_destructed)
+        return Vec_get_IsDestructed;
+
+    // Plug
     for (size_t i = 0; i < items_count; i++) {
-        auto res = Vec_push(self, items[i * self->_item_size]);
-        if (res != Vec_push_Success) return res;
+        void *item = items + (i * self->_item_size);
+        enum Vec_push_ResCode res = Vec_push(self, item);
+        if (res == Vec_push_MemoryOverflow) return res;
+        assert(res == Vec_push_Success);
     }
 
     return Vec_push_Success;
