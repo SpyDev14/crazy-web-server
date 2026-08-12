@@ -4,8 +4,7 @@
 
 /*
 Doesn't need after use C23 standard instead C17 (selected as
-default in IDE; but dont known clearly why gcc successfully
-compile it in C23 (gcc default) with my own bool)
+default in IDE)
 typedef enum {
     true = 1,
     false = 0,
@@ -13,6 +12,7 @@ typedef enum {
 */
 
 #define nameof(any) #any
+#define generic _Generic
 
 typedef signed   char   sbyte;
 typedef unsigned char   byte;

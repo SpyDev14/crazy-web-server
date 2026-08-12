@@ -13,31 +13,16 @@
 #include "src/errors.h"
 #include "src/common.h"
 #include "src/http.h"
-
-#define REQ_READ_BUFF_SIZE 4 * KB
-#define RESP_BUFF_SZ 4 * KB
-
-#define DEFAULT_PORT 8080
-#define DEFAULT_CONN_QUEUE_SZ 10
+#include "src/conf.h"
 
 
-struct Config {
-    ushort PORT;
-    ushort CONNECTION_QUEUE_SIZE;
+const struct Config DEFAULT_CONF = {
+    .CONNECTION_QUEUE_SIZE = 10,
+    .PORT = 8080
 };
 
-struct Config parse_config_from_run_args(int argc, char *argv[]) {
-    // Does nothing now
-    struct Config conf = {
-        .CONNECTION_QUEUE_SIZE = DEFAULT_CONN_QUEUE_SZ,
-        .PORT = DEFAULT_PORT,
-    };
-
-    return conf;
-}
-
 int main(int argc, char *argv[]) {
-    struct Config conf = parse_config_from_run_args(argc, argv);
+    struct Config conf = DEFAULT_CONF;
 
     struct sockaddr_in address = {
         .sin_family = AF_INET,

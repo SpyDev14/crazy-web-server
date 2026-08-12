@@ -1,6 +1,6 @@
 CC := gcc
 
-BASE_FLAGS = -I. -Wall -Wextra -Wstrict-prototypes -Wno-builtin-declaration-mismatch
+BASE_FLAGS = -I. -Wall -Wextra -Wstrict-prototypes -Wno-builtin-declaration-mismatch --std=gnu23
 DEBUG_FLAGS := $(BASE_FLAGS) -g -O0 -DDEBUG -Wno-unused
 RELEASE_FLAGS := $(BASE_FLAGS) -O2 -DNDEBUG
 

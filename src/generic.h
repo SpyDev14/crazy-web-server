@@ -6,7 +6,7 @@
 // - separator: "" if type_prefix == "", else " "
 // - pointer: void *
 // defined as macro just for being near to REQUIRED_REPR_STR_LEN
-#define __REPR_FMT_FOR(type_name, type_prefix) ("<" #type_prefix "%s" #type_name " at %p>")
+#define _REPR_FMT(type_name, type_prefix) ("<" #type_prefix "%s" #type_name " at %p>")
 
 // Return repr str len for given type WITHOUT NULL TERMINATOR. Runtime size can be lower
 // than it because %p size not defined in standard and can change.
@@ -29,8 +29,7 @@ int type_name##_repr(const type_prefix type_name *self, char out[], size_t out_l
 
 #define DEF_REPR_IMPL(type_name, type_prefix) \
 DEF_REPR_HEAD(type_name, type_prefix) { \
-    char fmt[] = __REPR_FMT_FOR(type_name, type_prefix); \
+    char fmt[] = _REPR_FMT(type_name, type_prefix); \
     char *sep = *#type_prefix == '\0' ? "" : " "; \
     return snprintf(out, out_len, fmt, sep, self); \
 }\
-//

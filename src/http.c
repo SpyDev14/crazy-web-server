@@ -2,7 +2,7 @@
 #include <unistd.h>
 #include "./http.h"
 
-#define READ_REQUEST_BUFFER_SIZE 4 * KB
+#define READ_REQ_CHUNK_SZ 1 * KB
 
 const char *HTTPResponseCode_to_reason_phrase(enum HTTPResponseCode self) {
     switch (self) {
@@ -111,33 +111,24 @@ struct read_http_request_Result read_http_request(
 
     enum _ReadRequestState state = READ_HEAD;
 
-    // how much bytes need to skip for get access to first body byte
-    // in bytes with "\r\n\r\n";
-    // 0 == is not initted;
-    size_t head_part_size = 0;
-
-    // 1. Receive and parse head (method, uri, check http version)
-    // 2. Get Content-Length from then
-    // 3. Receive body by CL
     struct Vec headers = new_Vec(sizeof(struct HTTPHeader));
-    struct Vec buffer = new_Vec(1);
     while(true) {
         ssize_t bytes_read;
-        char buff[READ_REQUEST_BUFFER_SIZE] = {0};
+        char chunk[READ_REQ_CHUNK_SZ] = {0};
 
-        bytes_read = read(client_fd, buff, sizeof(buff));
+        bytes_read = read(client_fd, chunk, sizeof(chunk));
+        bytes_read_total += bytes_read;
         switch (bytes_read) {
             case -1: return EXTERR(read_http_request, IOReadError, {.error_code = errno});
             case 0:  return ERR(read_http_request, ClientCloseConnection);
         }
 
-        bytes_read_total += bytes_read;
-        {
-            enum Vec_push_ResCode res_code = Vec_push_several(&buffer, &buff, bytes_read);
-            if (res_code == Vec_push_MemoryOverflow) {
-                return ERR(read_http_request, MemoryOverflow);
-            }
-            assert(res_code == Vec_push_Success);
+        switch (state) {
+            case READ_HEAD:
+                break;
+
+            case READ_HEADERS:
+                break;
         }
     }
 
