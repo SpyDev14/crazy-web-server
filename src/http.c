@@ -2,6 +2,7 @@
 #include <unistd.h>
 
 #include "src/generic/parse.h"
+#include "src/parsing.h"
 #include "./http.h"
 
 #define READ_REQ_CHUNK_SZ 1 * KB
@@ -87,29 +88,79 @@ const char *HTTPResponseCode_to_reason_phrase(enum HTTPResponseCode self) {
 }
 
 /* HTTPVersion: Special functions */
-bool parse_n_HTTPVersion(char *str, size_t len, struct HTTPVersion *out) {
-    const char *AWAITED_PREFIX = "HTTP/";
+bool parse_n_HTTPVersion(const char *str, size_t len, struct HTTPVersion *out) {
+    // "HTTP/" literal lives in static memory
+    // const here makes this pointer read-only,
+    // but awaited_prefix can be changed (like awaited_prefix = NULL)
+    const char *awaited_prefix = "HTTP/";
+    const char *curr = str;
 
-    char *curr = str;
-    // can change AWAITED_PREFIX by `c` without const
-    for (const char *c = AWAITED_PREFIX; c != '\0'; c++) {
-        // Given string shorten than needed
-        if (curr - str < len)
-            return false;
+    // can change awaited_prefix by `c` without const
+    for (const char *c = awaited_prefix; *c != '\0'; c++) {
+        if (curr - str >= len) return false;
+        if (*curr != *c) return false;
 
-        if (*curr != *c)
-            return false;
+        curr++;
     }
 
-    // ushort for case, where major in str: > 255 and <= 999
+    // Divide substrings
+    // Needs initialization; by default it holds garbage, not 0x00.
+    const char *major_start = NULL;
+    const char *minor_start = NULL;
+    byte major_len = 0;
+    byte minor_len = 0;
+    {
+        // Reminder:
+        // x = ++some; <=> some += 1; x = some;
+        // x = some++; <=> x = some; some += 1;
+
+        // Select major
+        major_start = curr;
+        while (curr - str < len && *curr != '.') {
+            if (++major_len > 3) return false;
+            curr++;
+        }
+
+        // Select minor if has
+        // +1 for case: "HTTP/1.", else out of buffer
+        if (curr + 1 - str < len && *curr == '.') {
+            minor_start = ++curr;
+            while (curr - str < len) {
+                if (++minor_len > 3) return false;
+                curr++;
+            }
+        }
+    }
+
+    if (major_len == 0) return false;
+    if (major_len > 3) return false;
+    if (minor_len > 3) return false;
+
+    // ushort for exempt overflows
     ushort major = 0;
-    // Parse major: max 3 symbols, 
-    while (curr - str < len || curr - str >= 3) {
+    ushort minor = 0;
+    long num = 0;
 
+    if (!parse_n_long(major_start, major_len, &num)) return false;
+    major = (ushort)num;
+
+    if (major > 255) return false;
+
+    if (minor_start != NULL) {
+        if (minor_len == 0) return false; // For example: "HTTP/1."
+        if (!parse_n_long(minor_start, minor_len, &num)) return false;
+        minor = (ushort)num;
     }
+
+    if (minor > 255) return false;
+
+    out->major = (byte)major;
+    out->minor = (byte)minor;
+
+    return true;
 }
 
-bool parse_HTTPVersion(char *str, struct HTTPVersion *out) {
+bool parse_HTTPVersion(const char *str, struct HTTPVersion *out) {
     IMPL_PARSE_NULL_TERMINATED_STR(str, len, out, parse_n_HTTPVersion)
 }
 
@@ -163,7 +214,7 @@ struct read_http_request_Result read_http_request(
     }
 
     union read_http_request_ReturnValue value = {
-        .Success = (struct read_http_request_SuccessReturnValue){
+        .Success = (struct read_http_request_SuccessData){
             .request = request,
             .bytes_read_total = bytes_read_total,
         }

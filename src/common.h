@@ -14,6 +14,9 @@ typedef enum {
 #define nameof(any) #any
 #define generic _Generic
 
+/* (i don't like this  suffix "_t" from stdlib) */
+/* also libc have several typedefs of ints (types.h, stdlib.h, ...) */
+/* Alternative for byte, short, and other is Rust-like u8-64 + i8-64 */
 typedef signed   char   sbyte;
 typedef unsigned char   byte;
 typedef unsigned short  ushort;

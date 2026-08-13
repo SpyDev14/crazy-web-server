@@ -3,7 +3,6 @@
 #include <netinet/in.h>
 
 #include "src/collections/vec.h"
-#include "src/errors.h"
 #include "src/common.h"
 
 
@@ -87,7 +86,7 @@ enum HTTPResponseCode : ushort {
     HTTP_511_NETWORK_AUTHENTICATION_REQUIRED = 511
 };
 
-// Remind: return null-terminated string in static memory
+// Reminder: return null-terminated string in static memory
 const char *HTTPResponseCode_to_reason_phrase(enum HTTPResponseCode self);
 
 struct HTTPHeader {
@@ -100,6 +99,7 @@ struct HTTPRequesterInfo {
     in_port_t port;
 };
 
+/* HTTPVersion */
 struct HTTPVersion {
     byte major;
     byte minor;
@@ -109,11 +109,14 @@ struct HTTPVersion {
 // Awaited format: "HTTP/<major: 1-255>[.<minor: 0-255>]"
 bool parse_HTTPVersion(char *str, struct HTTPVersion *out);
 bool parse_n_HTTPVersion(char *str, size_t len, struct HTTPVersion *out);
+
+/* HTTPVersion: Read-only methods */
 // Max len of HTTPVersion string
 #define HTTP_VERSION_STR_LEN sizeof("HTTP/255.255")
 // Call snprintf with prepared params
 int HTTPVersion_to_string(struct HTTPVersion self, char *buff, size_t buff_len);
 
+/* HTTPRequest */
 struct HTTPRequest {
     const char *method;
     // Defined as URI by HTTP protocol.
@@ -140,20 +143,18 @@ struct HTTPRequest {
     const struct HTTPRequesterInfo requester;
 };
 
-struct HTTPResponse {
-    struct HTTPVersion http_version;
-    enum HTTPResponseCode code;
-    const ARRAY(struct HTTPHeader, headers);
-    const ARRAY(void, body);
-};
-
-struct read_http_request_SuccessReturnValue {
+struct read_http_request_SuccessData {
     struct HTTPRequest request;
     size_t bytes_read_total;
 };
+
+struct read_http_request_IOReadErrorData {
+    int error_code;
+};
+
 union read_http_request_ReturnValue {
-    struct read_http_request_SuccessReturnValue Success;
-    struct IOReadErrorData IOReadError;
+    struct read_http_request_SuccessData Success;
+    struct read_http_request_IOReadErrorData IOReadError;
 };
 
 enum read_http_request_ResCode {
@@ -162,10 +163,6 @@ enum read_http_request_ResCode {
     read_http_request_ClientCloseConnection,
     // read return -1
     read_http_request_IOReadError,
-    /* I remove it in future
-    // Request valid by HTTP protocol, but not contain Client-Length header
-    read_http_request_RequestNotContainsContentLength,
-    */
     // Request HTTP version is not supported
     read_http_request_HTTPVersionNotSupported,
     // any alloc return NULL
@@ -180,3 +177,12 @@ struct read_http_request_Result read_http_request(
     const struct sockaddr_in *client_addr,
     struct Vec *objects_to_free
 );
+
+
+/* HTTPResponse */
+struct HTTPResponse {
+    struct HTTPVersion http_version;
+    enum HTTPResponseCode code;
+    const ARRAY(struct HTTPHeader, headers);
+    const ARRAY(void, body);
+};

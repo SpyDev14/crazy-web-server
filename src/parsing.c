@@ -1,38 +1,34 @@
 #include <stdlib.h>
+
 #include "src/common.h"
+#include "src/generic/parse.h"
 #include "./parsing.h"
 
 
-struct parse_num_Result sparse_num(const char *str, size_t str_len) {
+bool parse_n_long(const char *str, size_t len, long *out) {
+    if (len == 0) return false;
+
     long num = 0;
     bool is_neg = false;
-    char *curr_char = str;
+    const char *curr = str;
 
-    if (*curr_char == '-') {
+    if (*curr == '-') {
         is_neg = true;
-        curr_char++;
+        curr++;
     }
 
-    while (curr_char - str < str_len) {
-        if (*curr_char < '0' || *curr_char > '9') {
-            return ERR(parse_num, IsNotANumber);
-        }
+    while (curr - str < len) {
+        if (*curr < '0' || *curr > '9') return false;
 
-        num += (*curr_char - '0') * (curr_char - str - is_neg);
-        curr_char++;
+        num = num * 10 + (*curr - '0');
+        curr++;
     }
 
-    num *= is_neg;
-    return OK(parse_num, num);
+    if (is_neg) num = -num;
+    *out = num;
+    return true;
 }
 
-struct parse_num_Result parse_num(const char *str) {
-    size_t str_len = 0;
-    char *current_char = str;
-    while (*current_char != '\0') {
-        str_len++;
-        current_char++;
-    }
-
-    return sparse_num(str, str_len);
+bool parse_long(const char *str, long *out) {
+    IMPL_PARSE_NULL_TERMINATED_STR(str, len, out, parse_n_long);
 }

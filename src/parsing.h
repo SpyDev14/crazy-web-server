@@ -1,15 +1,12 @@
+/*
+ * Module for parsing base types
+*/
+
 #pragma once
 
 #include <stdlib.h>
 #include "src/common.h"
 
-// TODO: Rewrite to simple wariant in C# style (parse(str, out) -> bool)
-enum parse_num_ResCode {
-    parse_num_Success,
-    parse_num_IsNotANumber,
-};
-DEF_RESULT(parse_num, long);
-
 // variant for not null-terminated str
-struct parse_num_Result sparse_num(const char *str, size_t str_len);
-struct parse_num_Result parse_num(const char *str);
+bool parse_n_long(const char *str, size_t len, long *out);
+bool parse_long(const char *str, long *out);
