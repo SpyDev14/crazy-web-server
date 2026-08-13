@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <netinet/in.h>
 
-#include "src/collections.h"
+#include "src/collections/vec.h"
 #include "src/errors.h"
 #include "src/common.h"
 
@@ -105,9 +105,10 @@ struct HTTPVersion {
     byte minor;
 };
 
-/* Parse similar to new, so "parse" is a prefix */
+/* HTTPVersion: Special functions */
+// Awaited format: "HTTP/<major: 1-255>[.<minor: 0-255>]"
 bool parse_HTTPVersion(char *str, struct HTTPVersion *out);
-bool parse_n_HTTPVersion(char *str, size_t str_len, struct HTTPVersion *out);
+bool parse_n_HTTPVersion(char *str, size_t len, struct HTTPVersion *out);
 // Max len of HTTPVersion string
 #define HTTP_VERSION_STR_LEN sizeof("HTTP/255.255")
 // Call snprintf with prepared params

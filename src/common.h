@@ -30,10 +30,23 @@ typedef unsigned long   ulong;
 }\
 
 // Set code only
-#define ERR(func_name, code_) (struct func_name##_Result){.code = func_name##_##code_}
+#define ERR(func_name, code_) \
+    (struct func_name##_Result) { \
+        .code = func_name##_##code_ \
+    }
+
 // For union ResultValue-s with error data, like IOReadErrorData
-#define EXTERR(func_name, code_, data) (struct func_name##_Result){.code = func_name##_##code_, .value = {.code_ = data}}
-#define OK(func_name, value_) (struct func_name##_Result){.code = func_name##_Success, .value = value_};
+#define EXTERR(func_name, code_, data) \
+    (struct func_name##_Result) { \
+        .code = func_name##_##code_, \
+        .value = {.code_ = data} \
+    }
+
+#define OK(func_name, value_) \
+    (struct func_name##_Result) { \
+        .code = func_name##_Success, \
+        .value = value_ \
+    }
 
 
 #define ROUND_UP_TO_8(x) (((x) + 7) &~ 7u)

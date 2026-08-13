@@ -8,7 +8,7 @@
 #include <errno.h>
 #include <assert.h>
 
-#include "src/collections.h"
+#include "src/collections/vec.h"
 #include "src/logging.h"
 #include "src/errors.h"
 #include "src/common.h"

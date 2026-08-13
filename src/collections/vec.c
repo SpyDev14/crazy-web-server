@@ -3,7 +3,7 @@
 #include <string.h>
 
 #include "src/logging.h"
-#include "./collections.h"
+#include "./vec.h"
 
 
 /* Special funcs */
@@ -43,7 +43,7 @@ struct Vec_get_Result Vec_get(const struct Vec *self, size_t i) {
     return OK(Vec_get, item_ptr);
 }
 
-DEF_REPR_IMPL(Vec, struct)
+DEFINE_REPR_FOR(Vec, struct)
 
 
 /* Mutate methods */

@@ -1,5 +1,7 @@
 #include <errno.h>
 #include <unistd.h>
+
+#include "src/generic/parse.h"
 #include "./http.h"
 
 #define READ_REQ_CHUNK_SZ 1 * KB
@@ -84,13 +86,41 @@ const char *HTTPResponseCode_to_reason_phrase(enum HTTPResponseCode self) {
     }
 }
 
+/* HTTPVersion: Special functions */
+bool parse_n_HTTPVersion(char *str, size_t len, struct HTTPVersion *out) {
+    const char *AWAITED_PREFIX = "HTTP/";
+
+    char *curr = str;
+    // can change AWAITED_PREFIX by `c` without const
+    for (const char *c = AWAITED_PREFIX; c != '\0'; c++) {
+        // Given string shorten than needed
+        if (curr - str < len)
+            return false;
+
+        if (*curr != *c)
+            return false;
+    }
+
+    // ushort for case, where major in str: > 255 and <= 999
+    ushort major = 0;
+    // Parse major: max 3 symbols, 
+    while (curr - str < len || curr - str >= 3) {
+
+    }
+}
+
+bool parse_HTTPVersion(char *str, struct HTTPVersion *out) {
+    IMPL_PARSE_NULL_TERMINATED_STR(str, len, out, parse_n_HTTPVersion)
+}
+
+/* HTTPVersion: Read-only methods */
 int HTTPVersion_to_string(struct HTTPVersion self, char *out, size_t out_len) {
     if (self.minor == 0)
         return snprintf(out, out_len, "HTTP/%u", self.major);
     return snprintf(out, out_len, "HTTP/%u.%u", self.major, self.minor);
 }
 
-enum _ReadRequestState {
+enum ReadRequestState {
     READ_HEAD,
     READ_HEADERS,
     READ_BODY
@@ -109,7 +139,7 @@ struct read_http_request_Result read_http_request(
         },
     };
 
-    enum _ReadRequestState state = READ_HEAD;
+    enum ReadRequestState state = READ_HEAD;
 
     struct Vec headers = new_Vec(sizeof(struct HTTPHeader));
     while(true) {

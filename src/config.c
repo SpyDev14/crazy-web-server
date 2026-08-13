@@ -1,5 +1,5 @@
 #include <stdlib.h>
-#include "./conf.h"
+#include "./config.h"
 
 
 const char *_CONF_FIELD_NAMES[] = {

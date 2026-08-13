@@ -2,8 +2,8 @@
 #include <stdlib.h>
 #include <assert.h>
 
+#include "src/generic/repr.h"
 #include "src/common.h"
-#include "src/generic.h"
 
 #if FALSE
 /* Iterator def */
@@ -75,7 +75,7 @@ struct Vec_get_Result Vec_get(const struct Vec *self, size_t i);
 
 // You can known need buffer length at comp-time by `REPR_LEN`
 // macro (`REPR_LEN` + 1 for null-terminator)
-DEF_REPR_HEAD(Vec, struct);
+DECLARE_REPR_FOR(Vec, struct);
 #define VEC_REPR_LEN REPR_LEN(struct Vec)
 
 /* Mutate methods */
