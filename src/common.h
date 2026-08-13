@@ -9,6 +9,9 @@ typedef enum {
     true = 1,
     false = 0,
 } bool;
+
+Saved for history (it is per-project, not production, can just comment
+instead remove by git commit like in prod)
 */
 
 #define nameof(any) #any
