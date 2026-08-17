@@ -1,14 +1,18 @@
-#include <errno.h>
 #include <unistd.h>
+#include <string.h>
+#include <errno.h>
 
 #include "src/generic/parse.h"
-#include "src/parsing.h"
+#include "src/utils/text.h"
+#include "src/logging.h"
+#include "src/parsing_primitives.h"
 #include "./http.h"
 
-#define READ_REQ_CHUNK_SZ 1 * KB
+#define READ_REQ_CHUNK_PART_SZ 512
+#define READ_REQ_CHUNK_SZ (READ_REQ_CHUNK_PART_SZ * 2)
 
-const char *HTTPResponseCode_to_reason_phrase(enum HTTPResponseCode self) {
-    switch (self) {
+const char *HTTPResponseCode_to_reason_phrase(enum HTTPResponseCode this) {
+    switch (this) {
         // 1xx: Informational
         case 100: return "Continue";
         case 101: return "Switching Protocols";
@@ -87,6 +91,93 @@ const char *HTTPResponseCode_to_reason_phrase(enum HTTPResponseCode self) {
     }
 }
 
+/* HTTPHeader: Special functions */
+enum parse_HTTPHeader_ResCode parse_n_HTTPHeader(const char *str, size_t len, struct HTTPHeader *out) {
+    #define IS_ALLOWED_WHITESPACE(c) (c == ' ' || c == '\t')
+    size_t name_len, value_len;
+    char *curr = str;
+
+    #define IN_BOUNDS (curr - str < len)
+    #define IT_WAS_OUT_OF_BOUNDS (curr - str == len)
+
+    while (IN_BOUNDS && *curr != ':') {
+        if (!IS_VISIBLE_ASCII(*curr))
+            return parse_HTTPHeader_InvalidString;
+        curr++;
+    }
+
+    if (IT_WAS_OUT_OF_BOUNDS || curr == str)
+        return parse_HTTPHeader_InvalidString;
+
+    name_len = curr - str;
+    curr++; // Skip ":"
+
+    // Skipping whitespaces
+    while(IN_BOUNDS && IS_ALLOWED_WHITESPACE(*curr))
+        curr++;
+
+    if (IT_WAS_OUT_OF_BOUNDS)
+        return parse_HTTPHeader_InvalidString;
+
+    char *value_start = curr;
+    while (IN_BOUNDS) {
+        if (!(IS_VISIBLE_ASCII(*curr) || IS_ALLOWED_WHITESPACE(*curr)))
+            return parse_HTTPHeader_InvalidString;
+        curr++;
+    }
+
+    if (value_len == value_start)
+        return parse_HTTPHeader_InvalidString;
+
+    value_len = curr - value_start;
+
+    // Trimming right
+    while (!IS_VISIBLE_ASCII(*curr)) {
+        value_len--;
+        curr--;
+    }
+
+    char *name = malloc(name_len + 1);
+    if (name == NULL) {
+        log(L_ERROR, L_ARGS, "malloc failed");
+        return parse_HTTPHeader_MemoryOverflow;
+    }
+    name[name_len] = 0;
+
+    char *value = malloc(value_len + 1);
+    if (value == NULL) {
+        log(L_ERROR, L_ARGS, "malloc failed");
+        return parse_HTTPHeader_MemoryOverflow;
+    }
+    value[value_len] = 0;
+
+    *out = (struct HTTPHeader) {
+        .name = name,
+        .value = value,
+    };
+    return parse_HTTPHeader_Success;
+    #undef IS_ALLOWED_WHITESPACE
+    #undef IN_BOUNDS
+    #undef IT_WAS_OUT_OF_BOUNDS
+}
+
+enum parse_HTTPHeader_ResCode parse_HTTPHeader(const char *str, struct HTTPHeader *out) {
+    IMPL_PARSE_NULL_TERMINATED_STR(str, out, parse_n_HTTPHeader, len)
+}
+
+void dispose_HTTPHeader(struct HTTPHeader *this) {
+    free(this->name);
+    free(this->value);
+
+    this->name = NULL;
+    this->value = NULL;
+
+    log(L_DEBUG, L_ARGS, HTTP_HEADER_REPR_FMT, this);
+}
+
+/* Read-only methods */
+size_t HTTPHeader_to_string(struct HTTPHeader this, char *buff, size_t buff_len);
+
 /* HTTPVersion: Special functions */
 bool parse_n_HTTPVersion(const char *str, size_t len, struct HTTPVersion *out) {
     // "HTTP/" literal lives in static memory
@@ -107,8 +198,8 @@ bool parse_n_HTTPVersion(const char *str, size_t len, struct HTTPVersion *out) {
     // Needs initialization; by default it holds garbage, not 0x00.
     const char *major_start = NULL;
     const char *minor_start = NULL;
-    byte major_len = 0;
-    byte minor_len = 0;
+    u8 major_len = 0;
+    u8 minor_len = 0;
     {
         // Reminder:
         // x = ++some; <=> some += 1; x = some;
@@ -136,42 +227,42 @@ bool parse_n_HTTPVersion(const char *str, size_t len, struct HTTPVersion *out) {
     if (major_len > 3) return false;
     if (minor_len > 3) return false;
 
-    // ushort for exempt overflows
-    ushort major = 0;
-    ushort minor = 0;
-    long num = 0;
+    // u16 for exempt overflows
+    u16 major = 0;
+    u16 minor = 0;
+    u64 num = 0;
 
-    if (!parse_n_long(major_start, major_len, &num)) return false;
-    major = (ushort)num;
+    if (!parse_n_u64(major_start, major_len, &num)) return false;
+    major = (u16)num;
 
     if (major > 255) return false;
 
     if (minor_start != NULL) {
         if (minor_len == 0) return false; // For example: "HTTP/1."
-        if (!parse_n_long(minor_start, minor_len, &num)) return false;
-        minor = (ushort)num;
+        if (!parse_n_u64(minor_start, minor_len, &num)) return false;
+        minor = (u16)num;
     }
 
     if (minor > 255) return false;
 
-    out->major = (byte)major;
-    out->minor = (byte)minor;
+    out->major = (u8)major;
+    out->minor = (u8)minor;
 
     return true;
 }
 
 bool parse_HTTPVersion(const char *str, struct HTTPVersion *out) {
-    IMPL_PARSE_NULL_TERMINATED_STR(str, len, out, parse_n_HTTPVersion)
+    IMPL_PARSE_NULL_TERMINATED_STR(str, out, parse_n_HTTPVersion, len)
 }
 
 /* HTTPVersion: Read-only methods */
-int HTTPVersion_to_string(struct HTTPVersion self, char *out, size_t out_len) {
-    if (self.minor == 0)
-        return snprintf(out, out_len, "HTTP/%u", self.major);
-    return snprintf(out, out_len, "HTTP/%u.%u", self.major, self.minor);
+size_t HTTPVersion_to_string(struct HTTPVersion this, char *out, size_t out_len) {
+    if (this.minor == 0)
+        return snprintf(out, out_len, "HTTP/%u", this.major);
+    return snprintf(out, out_len, "HTTP/%u.%u", this.major, this.minor);
 }
 
-enum ReadRequestState {
+enum m_ReadRequestState {
     READ_HEAD,
     READ_HEADERS,
     READ_BODY
@@ -180,9 +271,8 @@ enum ReadRequestState {
 struct read_http_request_Result read_http_request(
     const int client_fd,
     const struct sockaddr_in *client_addr,
-    struct Vec *objects_to_free
+    FreeablesVec *objects_to_free
 ) {
-    size_t bytes_read_total = 0;
     struct HTTPRequest request = {
         .requester = {
             .ip = client_addr->sin_addr.s_addr,
@@ -190,27 +280,61 @@ struct read_http_request_Result read_http_request(
         },
     };
 
-    enum ReadRequestState state = READ_HEAD;
+    enum m_ReadRequestState state = READ_HEAD;
 
     struct Vec headers = new_Vec(sizeof(struct HTTPHeader));
+
+    // 1. Read raw bytes to buffer if parsed all lines processed
+    // 2. Select completed lines from buf
+    // 3. Parse lines by current state
+
+    size_t bytes_read_total = 0; // For reading result
+    size_t bytes_body_read_total = 0; // For check what body has been read
+    size_t content_length = 0; // Getted from content-length header if has
+
+    bool need_read_next_part = true;
+    char chunk[READ_REQ_CHUNK_SZ] = {0};
+    size_t cursor_offset = 0;
     while(true) {
-        ssize_t bytes_read;
-        char chunk[READ_REQ_CHUNK_SZ] = {0};
+        // If complete parsing headers but it not has Content-Length (no content)
+        if (state == READ_BODY && content_length == 0) break;
+        // If body has been read
+        if (state == READ_BODY && bytes_body_read_total == content_length) break;
 
-        bytes_read = read(client_fd, chunk, sizeof(chunk));
-        bytes_read_total += bytes_read;
-        switch (bytes_read) {
-            case -1: return EXTERR(read_http_request, IOReadError, {.error_code = errno});
-            case 0:  return ERR(read_http_request, ClientCloseConnection);
+        if (need_read_next_part) {
+            ssize_t bytes_read = read(client_fd, chunk, sizeof(chunk));
+
+            switch (bytes_read) {
+                case -1: return EXTERR(read_http_request, IOReadError, {.error_code = errno});
+                case 0:  return ERR(read_http_request, ClientCloseConnection);
+            }
+
+            need_read_next_part = false;
+            bytes_read_total += bytes_read;
         }
 
-        switch (state) {
-            case READ_HEAD:
-                break;
+        if (state != READ_BODY) {
+            while (true) {
+                // 2. Select line
+                size_t line_start_i = 0;
+                size_t line_end_i = 0;
 
-            case READ_HEADERS:
-                break;
+                while (line_end_i < READ_REQ_CHUNK_SZ && chunk[line_end_i] != '\r') {
+                    line_end_i++;
+                }
+
+                if (line_end_i == READ_REQ_CHUNK_SZ) {
+                    need_read_next_part = true;
+                    break;
+                }
+
+                if (chunk[line_end_i + 1] != '\n') {
+                    return ERR(read_http_request, RequestInvalid);
+                }
+            }
+            if (need_read_next_part) continue;
         }
+
     }
 
     union read_http_request_ReturnValue value = {

@@ -3,10 +3,12 @@
 #include <netinet/in.h>
 
 #include "src/collections/vec.h"
+#include "src/generic/repr.h"
+#include "src/freeable.h"
 #include "src/common.h"
 
 
-enum HTTPResponseCode : ushort {
+enum HTTPResponseCode : u16 {
     // 1xx: Informational
     HTTP_100_CONTINUE = 100,
     HTTP_101_SWITCHING_PROTOCOLS = 101,
@@ -87,34 +89,50 @@ enum HTTPResponseCode : ushort {
 };
 
 // Reminder: return null-terminated string in static memory
-const char *HTTPResponseCode_to_reason_phrase(enum HTTPResponseCode self);
+const char *HTTPResponseCode_to_reason_phrase(enum HTTPResponseCode this);
 
 struct HTTPHeader {
     const char *name;
     const char *value;
 };
 
+#define HTTP_HEADER_REPR_FMT REPR_FMT(struct HTTPHeader)
+
+/* HTTPHeader: Special methods */
+enum parse_HTTPHeader_ResCode {
+    parse_HTTPHeader_Success,
+    parse_HTTPHeader_InvalidString,
+    parse_HTTPHeader_MemoryOverflow,
+};
+
+// Awaited format: "Name: Value"; allowed multiply whitespaces around Value
+enum parse_HTTPHeader_ResCode parse_n_HTTPHeader(const char *str, size_t len, struct HTTPHeader *out);
+enum parse_HTTPHeader_ResCode parse_HTTPHeader(const char *str, struct HTTPHeader *out);
+
+/* HTTPHeader: Read-only methods */
+size_t HTTPHeader_to_string(struct HTTPHeader this, char *buff, size_t buff_len);
+
+
 struct HTTPRequesterInfo {
     in_addr_t ip;
     in_port_t port;
 };
 
-/* HTTPVersion */
 struct HTTPVersion {
-    byte major;
-    byte minor;
+    u8 major;
+    u8 minor;
 };
 
 /* HTTPVersion: Special functions */
 // Awaited format: "HTTP/<major: 1-255>[.<minor: 0-255>]"
-bool parse_HTTPVersion(char *str, struct HTTPVersion *out);
-bool parse_n_HTTPVersion(char *str, size_t len, struct HTTPVersion *out);
+bool parse_n_HTTPVersion(const char *str, size_t len, struct HTTPVersion *out);
+bool parse_HTTPVersion(const char *str, struct HTTPVersion *out);
 
 /* HTTPVersion: Read-only methods */
 // Max len of HTTPVersion string
 #define HTTP_VERSION_STR_LEN sizeof("HTTP/255.255")
 // Call snprintf with prepared params
-int HTTPVersion_to_string(struct HTTPVersion self, char *buff, size_t buff_len);
+size_t HTTPVersion_to_string(struct HTTPVersion this, char *buff, size_t buff_len);
 
 /* HTTPRequest */
 struct HTTPRequest {
@@ -143,6 +161,7 @@ struct HTTPRequest {
     const struct HTTPRequesterInfo requester;
 };
 
+/* reading request from socket */
 struct read_http_request_SuccessData {
     struct HTTPRequest request;
     size_t bytes_read_total;
@@ -175,7 +194,7 @@ DEF_RESULT(read_http_request, union read_http_request_ReturnValue);
 struct read_http_request_Result read_http_request(
     const int client_fd,
     const struct sockaddr_in *client_addr,
-    struct Vec *objects_to_free
+    FreeablesVec *objects_to_free
 );
 
 

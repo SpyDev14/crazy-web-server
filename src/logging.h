@@ -9,7 +9,20 @@ enum LoggingLevel {
     L_FATAL = 50,
 };
 
-const char *LoggingLevel_to_string(enum LoggingLevel self);
-void vlog(enum LoggingLevel level, const char *fmt, va_list args);
-void log(enum LoggingLevel level, const char *fmt, ...)
-    __attribute__((format(printf, 2, 3)));
+const char *LoggingLevel_to_string(enum LoggingLevel this);
+
+struct LogArgs {
+    char *func_name;
+    char *file_name;
+    u32 line;
+};
+
+void vlog(enum LoggingLevel level, struct LogArgs log_args, const char *fmt, va_list args);
+void log(enum LoggingLevel level, struct LogArgs log_args, const char *fmt, ...)
+    __attribute__((format(printf, 3, 4)));
+
+#define L_ARGS (struct LogArgs) { \
+    .func_name = __func__, \
+    .file_name = __FILE__, \
+    .line = __LINE__ \
+}

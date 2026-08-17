@@ -1,14 +1,16 @@
 #include <stdlib.h>
+
+#include "src/logging.h"
 #include "./config.h"
 
 
-const char *_CONF_FIELD_NAMES[] = {
+static const char *m_CONF_FIELD_NAMES[] = {
     #define X(T, name) #name,
     _CONF_FIELDS
     #undef X
 };
 
-const int _CONF_FIELDS_COUNT = (
+static const size_t m_CONF_FIELDS_COUNT = (
     #define X(T, name) 1 +
     _CONF_FIELDS 0
     #undef X
@@ -18,12 +20,23 @@ const int _CONF_FIELDS_COUNT = (
 /* Special funcs */
 struct Config new_Config_from_env(const char *prefix) {
     struct Config conf = {0};
-    for (int i = 0; i < _CONF_FIELDS_COUNT; i++) {
-        _CONF_FIELD_NAMES[i];
-
-    }
+    log(L_ERROR, L_ARGS, "not implemented");
+    return conf;
 }
-struct Config new_Config_from_command_line(const int argc, const char *argv[]);
+
+struct Config new_Config_from_command_line(int argc, const char *argv[]) {
+    struct Config conf = {0};
+    log(L_ERROR, L_ARGS, "not implemented");
+    return conf;
+}
 
 /* Read-only methods */
-struct Config Config_merge(const struct Config *self, const struct Config other);
+struct Config Config_merge(const struct Config *this, const struct Config *other) {
+    log(L_ERROR, L_ARGS, "not implemented");
+    return *this;
+}
+
+/* Mutate methods */
+void Config_update(struct Config *this, const struct Config *other) {
+    log(L_ERROR, L_ARGS, "not implemented");
+}

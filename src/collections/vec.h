@@ -17,9 +17,9 @@ struct IterationStep {
     bool is_exhausted;
 };
 
-struct IterationStep *next(struct Iterator *self);
+struct IterationStep *next(struct Iterator *this);
 
-struct Iterator Vec_iter(const struct Vec *self);
+struct Iterator Vec_iter(const struct Vec *this);
 #endif
 
 
@@ -31,7 +31,7 @@ struct Vec {
     // Current capacity in items
     size_t _capacity;
     // Prevent use-after-free;
-    bool _is_destructed;
+    bool _is_disposed;
     bool _buffer_need_free;
 };
 
@@ -46,7 +46,7 @@ static inline struct Vec new_Vec_with_buffer(size_t item_size, void *buffer, siz
         ._buffer = buffer,
         ._capacity = capacity,
         ._buffer_need_free = need_free,
-        ._is_destructed = false,
+        ._is_disposed = false,
     };
 }
 
@@ -54,24 +54,24 @@ static inline struct Vec new_Vec(size_t item_size) {
     return new_Vec_with_buffer(item_size, NULL, 0, false);
 }
 
-// Free allocated mem, mark Vec as destructed
-void destruct_Vec(struct Vec *self);
+// Free allocated mem, mark Vec as disposed
+void dispose_Vec(struct Vec *this);
 
 /* Properties */
-static inline size_t get_Vec_count(const struct Vec *self) {
-    return self->_count;
+static inline size_t get_Vec_count(const struct Vec *this) {
+    return this->_count;
 }
 
 /* Read-only Methods */
 enum Vec_get_ResCode {
     Vec_get_Success,
-    Vec_get_IsDestructed,
+    Vec_get_IsDisposed,
     // Also returned if not initted, because it's equivalent zero size
     Vec_get_IndexOutOfBounds,
 };
 DEF_RESULT(Vec_get, void*);
 
-struct Vec_get_Result Vec_get(const struct Vec *self, size_t i);
+struct Vec_get_Result Vec_get(const struct Vec *this, size_t i);
 
 // You can known need buffer length at comp-time by `REPR_LEN`
 // macro (`REPR_LEN` + 1 for null-terminator)
@@ -81,8 +81,11 @@ DECLARE_REPR_FOR(Vec, struct);
 /* Mutate methods */
 enum Vec_push_ResCode {
     Vec_push_Success,
-    Vec_push_IsDestructed,
+    Vec_push_IsDisposed,
     Vec_push_MemoryOverflow,
 };
-enum Vec_push_ResCode Vec_push(struct Vec *self, void* item);
-enum Vec_push_ResCode Vec_push_several(struct Vec *self, void *items, size_t items_count);
+enum Vec_push_ResCode Vec_push(struct Vec *this, void* item);
+enum Vec_push_ResCode Vec_push_several(struct Vec *this, void *items, size_t items_count);
+
+// Remove all items without deallocating
+void Vec_clear(struct Vec *this);

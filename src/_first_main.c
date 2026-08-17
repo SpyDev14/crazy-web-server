@@ -46,7 +46,7 @@ int main() {
 
     printf("Server start listen port %d\n", PORT);
     while (1) {
-        int addrsize = sizeof(address);
+        size_t addrsize = sizeof(address);
         int client_fd = accept(
             server_fd,
             (struct sockaddr *)&address,
