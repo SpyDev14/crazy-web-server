@@ -8,8 +8,9 @@
 #include "src/parsing_primitives.h"
 #include "./http.h"
 
-#define READ_REQ_CHUNK_PART_SZ 512
-#define READ_REQ_CHUNK_SZ (READ_REQ_CHUNK_PART_SZ * 2)
+// REQ - Request
+#define REQ_READ_CHUNK_SZ 8 * 1024
+#define REQ_READ_BUFF_SZ (REQ_READ_CHUNK_SZ * 2)
 
 const char *HTTPResponseCode_to_reason_phrase(enum HTTPResponseCode this) {
     switch (this) {
@@ -293,8 +294,25 @@ struct read_http_request_Result read_http_request(
     size_t content_length = 0; // Getted from content-length header if has
 
     bool need_read_next_part = true;
-    char chunk[READ_REQ_CHUNK_SZ] = {0};
-    size_t cursor_offset = 0;
+    char buff[REQ_READ_BUFF_SZ] = {0};
+    size_t write_cursor = 0;
+    /*
+    (Size 16 for example, '^' - write cursor)
+    1: Init
+    [ ][ ][ ][ ][ ][ ]
+     ^- 0
+    2: First read
+    [*][*][*][ ][ ][ ]
+           ^- 8
+    3: Sec read
+    [*][*][*][*][*][*]
+                    ^- 16
+    4: Third read: move half to left and read
+        [*][*][*][ ][ ][ ]
+               ^- 16
+        [*][*][*][*][*][*]
+                        ^- 24
+    */
     while(true) {
         // If complete parsing headers but it not has Content-Length (no content)
         if (state == READ_BODY && content_length == 0) break;
@@ -302,7 +320,16 @@ struct read_http_request_Result read_http_request(
         if (state == READ_BODY && bytes_body_read_total == content_length) break;
 
         if (need_read_next_part) {
-            ssize_t bytes_read = read(client_fd, chunk, sizeof(chunk));
+            ssize_t bytes_read;
+            if (write_cursor <= REQ_READ_CHUNK_SZ) {
+                bytes_read = read(
+                    client_fd,
+                    buff + write_cursor,
+                    REQ_READ_BUFF_SZ - write_cursor
+                );
+            }
+
+
 
             switch (bytes_read) {
                 case -1: return EXTERR(read_http_request, IOReadError, {.error_code = errno});
@@ -311,6 +338,7 @@ struct read_http_request_Result read_http_request(
 
             need_read_next_part = false;
             bytes_read_total += bytes_read;
+            write_cursor += bytes_read;
         }
 
         if (state != READ_BODY) {
@@ -319,16 +347,16 @@ struct read_http_request_Result read_http_request(
                 size_t line_start_i = 0;
                 size_t line_end_i = 0;
 
-                while (line_end_i < READ_REQ_CHUNK_SZ && chunk[line_end_i] != '\r') {
+                while (line_end_i < REQ_READ_BUFF_SZ && buff[line_end_i] != '\r') {
                     line_end_i++;
                 }
 
-                if (line_end_i == READ_REQ_CHUNK_SZ) {
+                if (line_end_i == REQ_READ_BUFF_SZ) {
                     need_read_next_part = true;
                     break;
                 }
 
-                if (chunk[line_end_i + 1] != '\n') {
+                if (buff[line_end_i + 1] != '\n') {
                     return ERR(read_http_request, RequestInvalid);
                 }
             }
