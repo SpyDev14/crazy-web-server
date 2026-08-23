@@ -31,7 +31,7 @@
 // You can known need buffer length at comp-time by `REPR_LEN` macro
 // (`REPR_LEN` + 1 for null-terminator)
 #define DECLARE_REPR_FOR(type_name, type_tag) \
-size_t type_name##_repr(const type_tag type_name *this, char out[], size_t out_len) \
+size_t type_name##_repr(const type_tag type_name *this, char out[], size_t out_len)
 //     ^^^^^^^^^^^^^^^^
 // Prefix need because need separated name for generate func-name (like "Vec_repr")
 
@@ -42,4 +42,4 @@ DECLARE_REPR_FOR(type_name, type_tag) { \
     char fmt[] = m_REPR_FMT(type_name, type_tag); \
     char *sep = *#type_tag == '\0' ? "" : " "; \
     return snprintf(out, out_len, fmt, sep, this); \
-} \
+}

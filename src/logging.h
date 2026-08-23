@@ -1,5 +1,6 @@
 #pragma once
 #include <stdarg.h>
+#include "src/common.h"
 
 enum LoggingLevel {
     L_DEBUG = 10,
@@ -12,9 +13,9 @@ enum LoggingLevel {
 const char *LoggingLevel_to_string(enum LoggingLevel this);
 
 struct LogArgs {
-    char *func_name;
-    char *file_name;
-    u32 line;
+    const char *func_name; // __func__ (implicit function-local static array)
+    const char *file_name; // __NAME__ (macro)
+    int line; // __LINE__ (macro)
 };
 
 void vlog(enum LoggingLevel level, struct LogArgs log_args, const char *fmt, va_list args);
@@ -26,3 +27,6 @@ void log(enum LoggingLevel level, struct LogArgs log_args, const char *fmt, ...)
     .file_name = __FILE__, \
     .line = __LINE__ \
 }
+
+// I make decision to not use LOG macro for save check fmt arg types by IDE
+#define LOG(level, fmt, ...) log(level, L_ARGS, fmt __VA_OPT__(,) __VA_ARGS__)

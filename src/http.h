@@ -93,8 +93,8 @@ const char *HTTPResponseCode_to_reason_phrase(enum HTTPResponseCode this);
 
 // DISPOSABLE
 struct HTTPHeader {
-    const char *name;
-    const char *value;
+    const char *name; // allocated
+    const char *value; // allocated
 };
 
 #define HTTP_HEADER_REPR_FMT REPR_FMT(struct HTTPHeader)
@@ -139,22 +139,18 @@ bool parse_HTTPVersion(const char *str, struct HTTPVersion *out);
 // Call snprintf with prepared params
 size_t HTTPVersion_to_string(struct HTTPVersion this, char *out, size_t out_len);
 
-/* HTTPMethod */
-typedef const char * HTTPMethod;
-
-// Check this string is valid HTTP Method.
-bool HTTPMethod_is_valid_n(HTTPMethod this, size_t n);
-bool HTTPMethod_is_valid(HTTPMethod this);
-
+/* HTTPMethod_t */
+typedef const char * HTTPMethod_t;
 
 /* HTTPRequest */
 #define HTTP_REQUEST_REPR_FMT REPR_FMT(struct HTTPRequest)
 
+// DISPOSABLE
 struct HTTPRequest {
     // double const needs to compatibility with in-memory method-strings
     // any can be const, but i too lazy for mark all fields const everytime
     // (i can mark a struct as const, but it is not a point, okay?)
-    HTTPMethod method;
+    HTTPMethod_t method; // allocated
     // Defined as URI by HTTP protocol.
     // URI: Uniform Resource Identifier - URL-s + URN-s
     // URL: Uniform Resource Locator.
@@ -172,13 +168,11 @@ struct HTTPRequest {
     //      idea - URN always identifier the same resource, concrete URL can
     //      changes, URN - never. No limits for URN resolvers count. Commonly
     //      used for links to science articles ("doi" namespace).
-    const char *uri;
+    const char *uri; // allocated
     struct HTTPVersion http_version;
-    const ARRAY(struct HTTPHeader, headers);
-    const ARRAY(void, body);
-    const struct HTTPRequesterInfo requester;
-
-    bool _is_disposed;
+    const ARRAY(struct HTTPHeader, headers); // allocated
+    const ARRAY(void, body); // allocated
+    struct HTTPRequesterInfo requester;
 };
 
 void dispose_HTTPRequest(struct HTTPRequest *this);
@@ -220,7 +214,7 @@ enum read_http_request_ResCode {
 DEF_RESULT(read_http_request, union read_http_request_ReturnValue);
 
 struct read_http_request_Result read_http_request(
-    const int client_fd,
+    int client_fd,
     const struct sockaddr_in *client_addr,
     FreeablesVec *objects_to_free
 );

@@ -54,7 +54,7 @@ typedef u8 byte;
 #define KB 1024
 
 
-// Maybe only ResCode + T *out param would be better.
+// Maybe only ResCode + T *out param would be better?
 #define DEF_RESULT(func_name, TValue) struct func_name##_Result { \
     enum func_name##_ResCode code;\
     TValue value;\
@@ -78,6 +78,20 @@ typedef u8 byte;
     .code = func_name##_Success, \
     .value = value_ \
 }
+
+// "Setable" version. Don't forget undef X_FUNC_NAME!
+// Example X_FUNC_NAME: #define X_FUNC_NAME foo
+// Set code only
+#define S_ERR(code_) ERR(X_FUNC_NAME, code_)
+
+// "Setable" version. Don't forget undef X_FUNC_NAME!
+// Example X_FUNC_NAME: #define X_FUNC_NAME foo
+// For union ResultValue-s with error data, like IOReadErrorData
+#define S_EXTERR(code_, data) EXTERR(X_FUNC_NAME, code_, data)
+
+// "Setable" version. Don't forget undef X_FUNC_NAME!
+// Example X_FUNC_NAME: #define X_FUNC_NAME foo
+#define S_OK(value_) OK(X_FUNC_NAME, value_)
 
 
 #define ROUND_UP_TO_8(x) (((x) + 7) &~ 7u)

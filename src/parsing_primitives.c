@@ -1,13 +1,15 @@
 #include <stdlib.h>
 #include <limits.h>
 
+#include "src/utils/guards.h"
+#include "src/utils/parse.h"
 #include "src/common.h"
-#include "src/generic/parse.h"
+
 #include "./parsing_primitives.h"
 
 
 bool parse_n_u64(const char *str, size_t len, u64 *out) {
-    if (len == 0) return false;
+    NOT_ZERO_GUARD(len, false);
 
     u64 num = 0;
     const char *curr = str;
@@ -34,7 +36,7 @@ bool parse_n_u64(const char *str, size_t len, u64 *out) {
 
 
 bool parse_n_i64(const char *str, size_t len, i64 *out) {
-    if (len == 0) return false;
+    NOT_ZERO_GUARD(len, false);
 
     bool is_neg = *str == '-';
 

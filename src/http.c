@@ -3,16 +3,32 @@
 #include <string.h>
 #include <errno.h>
 
-#include "src/generic/parse.h"
+#include "src/parsing_primitives.h"
+#include "src/utils/dispose.h"
+#include "src/utils/guards.h"
+#include "src/utils/parse.h"
 #include "src/utils/text.h"
 #include "src/logging.h"
-#include "src/parsing_primitives.h"
+
 #include "./http.h"
+
 
 // REQ - Request
 #define REQ_READ_BUFF_SZ 16 * KB
 #define REQ_MAX_URI_LEN 4096
 
+/* Local funcs */
+static bool is_token_allowed_char(char c) {
+    if (!(IS_ASCII_LETTER(c) || IS_DIGIT(c)))
+        return false;
+
+    if (strchr("!#$%&'*+-.^_`|~", c) == NULL)
+        return false;
+
+    return true;
+}
+
+/* HTTPResponseCode */
 const char *HTTPResponseCode_to_reason_phrase(enum HTTPResponseCode this) {
     switch (this) {
         // 1xx: Informational
@@ -93,47 +109,48 @@ const char *HTTPResponseCode_to_reason_phrase(enum HTTPResponseCode this) {
     }
 }
 
-/* HTTPHeader: Special functions */
+/* HTTPHeader */
 enum parse_HTTPHeader_ResCode parse_n_HTTPHeader(const char *str, size_t len, struct HTTPHeader *out) {
-    #define IS_ALLOWED_WHITESPACE(c) (c == ' ' || c == '\t')
-    size_t name_len, value_len;
-    char *curr = str;
+    NOT_ZERO_GUARD(len, parse_HTTPHeader_InvalidString);
+    const char *curr = str;
 
-    #define IN_BOUNDS (curr - str < len)
-    #define IT_WAS_OUT_OF_BOUNDS (curr - str == len)
+    #define l_IS_ALLOWED_WHITESPACE(c) (c == ' ' || c == '\t')
+    #define l_IN_BOUNDS ((size_t)(curr - str) < len)
+    #define l_IT_WAS_OUT_OF_BOUNDS ((size_t)(curr - str) == len)
 
-    while (IN_BOUNDS && *curr != ':') {
+    while (l_IN_BOUNDS && *curr != ':') {
         if (!IS_VISIBLE_ASCII(*curr))
             return parse_HTTPHeader_InvalidString;
         curr++;
     }
 
-    if (IT_WAS_OUT_OF_BOUNDS || curr == str)
+    if (l_IT_WAS_OUT_OF_BOUNDS || curr == str)
         return parse_HTTPHeader_InvalidString;
 
-    name_len = curr - str;
+    size_t name_len = curr - str;
+    if (name_len == 0) return parse_HTTPHeader_InvalidString;
     curr++; // Skip ":"
 
     // Skipping whitespaces
-    while(IN_BOUNDS && IS_ALLOWED_WHITESPACE(*curr))
+    while(l_IN_BOUNDS && l_IS_ALLOWED_WHITESPACE(*curr))
         curr++;
 
-    if (IT_WAS_OUT_OF_BOUNDS)
+    if (l_IT_WAS_OUT_OF_BOUNDS)
         return parse_HTTPHeader_InvalidString;
 
-    char *value_start = curr;
-    while (IN_BOUNDS) {
-        if (!(IS_VISIBLE_ASCII(*curr) || IS_ALLOWED_WHITESPACE(*curr)))
+    const char *value_start = curr;
+    while (l_IN_BOUNDS) {
+        if (!(IS_VISIBLE_ASCII(*curr) || l_IS_ALLOWED_WHITESPACE(*curr)))
             return parse_HTTPHeader_InvalidString;
         curr++;
     }
+    // curr here is OOB (== str[len])
 
-    if (value_len == value_start)
-        return parse_HTTPHeader_InvalidString;
-
-    value_len = curr - value_start;
+    size_t value_len = curr - value_start;
+    if (value_len == 0) return parse_HTTPHeader_InvalidString;
 
     // Trimming right
+    curr--; // return to bounds (== str[len - 1])
     while (!IS_VISIBLE_ASCII(*curr)) {
         value_len--;
         curr--;
@@ -158,9 +175,10 @@ enum parse_HTTPHeader_ResCode parse_n_HTTPHeader(const char *str, size_t len, st
         .value = value,
     };
     return parse_HTTPHeader_Success;
-    #undef IS_ALLOWED_WHITESPACE
-    #undef IN_BOUNDS
-    #undef IT_WAS_OUT_OF_BOUNDS
+
+    #undef l_IS_ALLOWED_WHITESPACE
+    #undef l_IN_BOUNDS
+    #undef l_IT_WAS_OUT_OF_BOUNDS
 }
 
 enum parse_HTTPHeader_ResCode parse_HTTPHeader(const char *str, struct HTTPHeader *out) {
@@ -168,8 +186,8 @@ enum parse_HTTPHeader_ResCode parse_HTTPHeader(const char *str, struct HTTPHeade
 }
 
 void dispose_HTTPHeader(struct HTTPHeader *this) {
-    free(this->name);
-    free(this->value);
+    free((void *)this->name);
+    free((void *)this->value);
 
     this->name = NULL;
     this->value = NULL;
@@ -184,6 +202,8 @@ size_t HTTPHeader_to_string(struct HTTPHeader *this, char *buff, size_t len) {
 
 /* HTTPVersion: Special functions */
 bool parse_n_HTTPVersion(const char *str, size_t len, struct HTTPVersion *out) {
+    NOT_ZERO_GUARD(len, false);
+
     // "HTTP/" literal lives in static memory
     // const here makes this pointer read-only,
     // but awaited_prefix can be changed (like awaited_prefix = NULL)
@@ -192,7 +212,7 @@ bool parse_n_HTTPVersion(const char *str, size_t len, struct HTTPVersion *out) {
 
     // can change awaited_prefix by `c` without const
     for (const char *c = awaited_prefix; *c != '\0'; c++) {
-        if (curr - str >= len) return false;
+        if ((size_t)(curr - str) >= len) return false;
         if (*curr != *c) return false;
 
         curr++;
@@ -211,19 +231,20 @@ bool parse_n_HTTPVersion(const char *str, size_t len, struct HTTPVersion *out) {
 
         // Select major
         major_start = curr;
-        while (curr - str < len && *curr != '.') {
+        while ((size_t)(curr - str) < len && *curr != '.') {
             if (++major_len > 3) return false;
             curr++;
         }
 
         // Select minor if has
         // +1 for case: "HTTP/1.", else out of buffer
-        if (curr + 1 - str < len && *curr == '.') {
+        if ((size_t)(curr + 1 - str) < len && *curr == '.') {
             minor_start = ++curr;
-            while (curr - str < len) {
+            while ((size_t)(curr - str) < len) {
                 if (++minor_len > 3) return false;
                 curr++;
             }
+            // curr here is OOB (== str[len])
         }
     }
 
@@ -259,21 +280,17 @@ bool parse_HTTPVersion(const char *str, struct HTTPVersion *out) {
     IMPL_PARSE_NULL_TERMINATED_STR(str, out, parse_n_HTTPVersion, len)
 }
 
-/* HTTPMethod */
-bool HTTPMethod_is_valid_n(HTTPMethod this, size_t n) {
-    if (n == 0) {
-        log(L_ERROR, L_ARGS, "n can't be zero");
-        return false;
-    }
+/* HTTPMethod_t */
+static bool HTTPMethod_is_valid_n(HTTPMethod_t this, size_t n) {
+    NOT_ZERO_GUARD(n, false);
 
-    for (const char *c = this; c - this < n; c++)
-        if(!IS_VISIBLE_ASCII(*c))
-            return false;
+    for (size_t i = 0; i < n; i++)
+        if(!is_token_allowed_char(this[i])) return false;
 
     return true;
 }
 
-bool HTTPMethod_is_valid(HTTPMethod this) {
+static bool HTTPMethod_is_valid(HTTPMethod_t this) {
     size_t n = strlen(this);
     return HTTPMethod_is_valid_n(this, n);
 }
@@ -289,20 +306,21 @@ size_t HTTPVersion_to_string(struct HTTPVersion this, char *out, size_t out_len)
 
 /* HTTPRequest */
 void dispose_HTTPRequest(struct HTTPRequest *this) {
-    free(this->method);
-    free(this->uri);
+    free((void *)this->method);
+    free((void *)this->uri);
 
     this->method = NULL;
     this->uri = NULL;
 
     for (size_t i = 0; i < this->headers_len; i++)
-        dispose_HTTPHeader(&this->headers[i]);
+        dispose_HTTPHeader((void *)&this->headers[i]);
+    free(this->headers);
 
-    log(L_DEBUG, L_ARGS, HTTP_REQUEST_REPR_FMT " disposed", this);
+    LOG_SUCCESSFUL_DISPOSED(HTTP_REQUEST_REPR_FMT, this);
 }
 
 struct read_http_request_Result read_http_request(
-    const int client_fd,
+    int client_fd,
     const struct sockaddr_in *client_addr,
     FreeablesVec *objects_to_free
 ) {
@@ -352,35 +370,43 @@ struct read_http_request_Result read_http_request(
     size_t content_length = 0; // Getted from content-length header if has
 
     // Parse head
-    #define INVALID_REQUEST_ERR ERR(read_http_request, RequestInvalid)
+    #define l_INVALID_REQUEST_ERR ERR(read_http_request, RequestInvalid)
+    const char *curr = buff;
+
+    // 0. Skip new lines if has at start
+    while (*curr == '\r' || *curr == '\n') curr++;
 
     // 1. Parse METHOD URI VERSION (first line)
-    char *curr = buff;
     {
-        char  *method_start, *uri_start, *version_start;
-        size_t method_len,    uri_len,    version_len;
+        const char *method_start, *uri_start, *version_start;
+
+        // fast exit if has some trash at start
+        if (!is_token_allowed_char(*curr))
+            return l_INVALID_REQUEST_ERR;
 
         method_start = curr;
         while (*curr != ' ') {
-            if (*curr == 0) return INVALID_REQUEST_ERR; // OOB
+            if (*curr == 0)
+                return l_INVALID_REQUEST_ERR; // OOB
             curr++;
         }
-        method_len = curr - method_start;
+        size_t method_len = curr - method_start;
         curr++;
 
+        // Check selected chars is valid token
         if (!HTTPMethod_is_valid_n(method_start, method_len))
-            return INVALID_REQUEST_ERR;
+            return l_INVALID_REQUEST_ERR;
 
         uri_start = curr;
         while (*curr != ' ') {
             if (*curr == 0) { // OOB
                 if (curr - uri_start > REQ_MAX_URI_LEN)
                     return ERR(read_http_request, RequestURITooLong);
-                else return INVALID_REQUEST_ERR;
+                else return l_INVALID_REQUEST_ERR;
             }
             curr++;
         }
-        uri_len = curr - uri_start;
+        size_t uri_len = curr - uri_start;
         curr++;
 
         if (uri_len > REQ_MAX_URI_LEN)
@@ -388,19 +414,19 @@ struct read_http_request_Result read_http_request(
 
         version_start = curr;
         while (*curr != '\r') {
-            if (*curr == 0) return INVALID_REQUEST_ERR; // OOB
+            if (*curr == 0) return l_INVALID_REQUEST_ERR; // OOB
             // to prevent full-scan if is LF instead CRLF (should be CRLF only)
-            if (*curr == '\n') return INVALID_REQUEST_ERR;
+            if (*curr == '\n') return l_INVALID_REQUEST_ERR;
             curr++;
         }
-        version_len = curr - version_start;
+        size_t version_len = curr - version_start;
         curr++;
 
-        if (*curr != '\n') return INVALID_REQUEST_ERR;
+        if (*curr != '\n') return l_INVALID_REQUEST_ERR;
         curr++;
 
         if (!parse_n_HTTPVersion(version_start, version_len, &request.http_version))
-            return INVALID_REQUEST_ERR;
+            return l_INVALID_REQUEST_ERR;
 
         char *method = malloc(method_len + 1);
         if (method == NULL) return ERR(read_http_request, MemoryOverflow);
@@ -415,13 +441,13 @@ struct read_http_request_Result read_http_request(
 
     // 2. Parse headers
     {
-        while (curr - buff < (head_len - 2)) {
+        while ((size_t)(curr - buff) < (head_len - 2)) {
             // Select line
-            char *header_start = curr;
+            const char *header_start = curr;
             size_t header_len = 0;
 
             while (*curr != '\r') {
-                if (*curr == 0) return INVALID_REQUEST_ERR; // OOB
+                if (*curr == 0) return l_INVALID_REQUEST_ERR; // OOB
                 curr++;
             }
 
@@ -429,7 +455,7 @@ struct read_http_request_Result read_http_request(
             curr++;
 
             if (*curr != '\n')
-                return INVALID_REQUEST_ERR;
+                return l_INVALID_REQUEST_ERR;
 
             struct HTTPHeader header;
             switch (parse_n_HTTPHeader(header_start, header_len, &header)) {
@@ -437,22 +463,25 @@ struct read_http_request_Result read_http_request(
                 case parse_HTTPHeader_MemoryOverflow:
                     return ERR(read_http_request, MemoryOverflow);
                 case parse_HTTPHeader_InvalidString:
-                    return INVALID_REQUEST_ERR;
+                    return l_INVALID_REQUEST_ERR;
             }
 
             Vec_push(&headers, &header);
 
-            if (header.name == "Content-Length") {
+            if (strcmp(header.name, "Content-Length")) {
                 // This project only for x64 where size always 64-bit
                 if (!parse_u64(header.value, &content_length))
                     return ERR(read_http_request, ContentLengthIsNotANumber);
             }
         }
+
+        // headers is const         vvvvvvv          vvvvvvv
+        Vec_as_new_array(&headers, (void **)&request.headers, &request.headers_len);
     }
 
     size_t content_read_total = 0; // For check what body has been read
 
-    // now without body reading
+    // now without body
 
     union read_http_request_ReturnValue value = {
         .Success = (struct read_http_request_SuccessData){
@@ -461,5 +490,5 @@ struct read_http_request_Result read_http_request(
         }
     };
     return OK(read_http_request, value);
-    #undef INVALID_REQUEST_ERR
+    #undef l_INVALID_REQUEST_ERR
 }

@@ -33,23 +33,89 @@
 - `protected`: префикс `_`, напр. `_field`
 - `private`:   префикс `__`, напр. `__field`
 
-**Функции, привязанные к типу:**
-- `protected`: префикс `prot_`, напр. `prot_get_Vec_buffer_size`
-- `private`:   префикс `priv_`, напр. `priv_get_Vec_buffer_size`
+**Функции, привязанные к типу (доступные в .h):**
+- `protected`: префикс `pt_`, напр. `pt_get_Vec_buffer_size`
+- `private`:   префикс `pv_`, напр. `pv_get_Vec_buffer_size`
+<!-- ^^^^^ Например, для обращения в inline-методах -->
 
-**Функции и глобальные переменные (уровень модуля)**:\
-Не определяются в `.h` файле, только в `.c`.
-- `private`: помечать как `static`, префикс `m_`, напр. `static void m_do_something`, `static m_CONFIG_FIELD_NAMES`. static здесь означает "не помечай доступным для импорта из .obj файла"
+**Функции, привязанные к типу (доступны только в .c):**
+- `protected`: помечать как `static`, напр. `static ... get_Vec_buffer_size()`
+- `private`:   помечать как `static`, напр. `static ... get_Vec_buffer_size()`
+
+**Функции (только в .c)**:\
+- `private`: помечать как `static`, напр. `static ... do_something()`.
 
 **Типы (уровень модуля)**:\
 Все типы, используемые в публичных функциях и переменных, также должны быть публичными.
 - `private`: префикс `m_`, напр. `m_ReadRequestState`
+
+**Глобальные переменные (только в .c)**:\
+- `private`: помечать как `static` c префиксом `m_`, напр. `static m_CONFIG_FIELD_NAMES`. static здесь означает "не помечай доступным для импорта из .obj файла"
 
 **Макросы в .h**:\
 - `private`: префикс `m_`, напр. `m_DEF_WIDE_PTR`
 
 **Макросы в .c**:\
 Без спецификаторов уровня доступа.
+
+## Не стандартные макросы
+### Макросы на уровне функций
+Макросы, определяемые внутри тела функций, должны начинаться с префикса `l_` (локальная) и **обязательно** должны быть удалены в самом низу тела функции.
+
+**Пример**:
+```c
+int foo(int x) {
+	int y = x * x * x;
+	// такие макросы, обращающиеся к локальным переменным, лучше объявлять после объявления этих переменных, пусть оно и будет работать, если объявить перед т.к это текстовая подстановка
+	#define l_BAR(factor) (x + (y * factor))
+	...
+	if (l_BAR(4) > 11)
+		return 42;
+	...
+	return x * 2;
+	#undef l_SOMETHING
+}
+```
+
+### Макросы как параметры других макросов
+Макросы для передачи их в качестве параметра в другой макрос, например:
+```c
+#define CONF_FIELDS \
+	X(u16, FOO) \
+	X(u16, BAR) \
+	X(char*, BAZ)
+```
+где `X` - макрос-параметр вида `X(T, name)`.
+Пример использования:
+```c
+struct Conf {
+	#define X(T, name) T name;
+		CONF_FIELDS
+	#undef X
+}
+```
+
+Или другой пример:
+```c
+#define SERR(code_) \
+(struct X_FUNC_NAME##_Result) { \
+    .code = func_name##_##code_ \
+}
+```
+где `X_FUNC_NAME` - просто "some_func".
+
+Пример использования:
+```c
+struct foo_Result foo(void data[], size_t data_len, size_t i) {
+	#define X_FUNC_NAME foo
+
+	if (i >= data_len)
+		return SERR(OutOfBounds); // instead ERR(foo, OutOfBounds);
+
+	return SOK(data[i]);
+	#undef X_FUNC_NAME
+}
+```
 
 ## Глобальные переменные
 Все глобальные переменные **только `const`**.

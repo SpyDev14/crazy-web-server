@@ -47,7 +47,7 @@ static inline size_t _get_Vec_buffer_size(const struct Vec *this) {
 struct Vec_get_Result Vec_get(const struct Vec *this, size_t i) {
     USE_AFTER_FREE_GUARD_BY_RESULT(this, Vec_get)
     if (this->_count < i) {
-        log(L_ERROR, L_ARGS, "i out of bounds, vec count is %d, i = %d", this->_count, i);
+        log(L_ERROR, L_ARGS, "i out of bounds, vec count is %zu, i = %zu", this->_count, i);
         return ERR(Vec_get, IndexOutOfBounds);
     }
 
@@ -57,6 +57,11 @@ struct Vec_get_Result Vec_get(const struct Vec *this, size_t i) {
 
 DEFINE_REPR_FOR(Vec, struct)
 
+void Vec_as_new_array(const struct Vec *this, void *out[], size_t *out_len) {
+    *out_len = this->_count * this->_item_size;
+    *out = malloc(*out_len);
+    memcpy(*out, this->_buffer, *out_len);
+}
 
 /* Mutate methods */
 enum Vec_push_ResCode Vec_push(struct Vec *this, void* item) {

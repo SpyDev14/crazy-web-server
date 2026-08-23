@@ -78,6 +78,9 @@ struct Vec_get_Result Vec_get(const struct Vec *this, size_t i);
 DECLARE_REPR_FOR(Vec, struct);
 #define VEC_REPR_LEN REPR_LEN(struct Vec)
 
+// Allocate new array, need free
+void Vec_as_new_array(const struct Vec *this, void *out[], size_t *out_len);
+
 /* Mutate methods */
 enum Vec_push_ResCode {
     Vec_push_Success,
