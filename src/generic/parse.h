@@ -9,6 +9,7 @@
 
 // Create body of parse_<T> impl
 #define IMPL_PARSE_NULL_TERMINATED_STR(str_p, out_p, parse_n_func, len_p) \
+    /* I knew about strlen, but would not to include string.h here */ \
     size_t len_p = 0; \
     { \
         char *current = str_p; \

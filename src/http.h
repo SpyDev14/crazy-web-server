@@ -91,6 +91,7 @@ enum HTTPResponseCode : u16 {
 // Reminder: return null-terminated string in static memory
 const char *HTTPResponseCode_to_reason_phrase(enum HTTPResponseCode this);
 
+// DISPOSABLE
 struct HTTPHeader {
     const char *name;
     const char *value;
@@ -110,6 +111,8 @@ enum parse_HTTPHeader_ResCode {
 // Awaited format: "Name: Value"; allowed multiply whitespaces around Value
 enum parse_HTTPHeader_ResCode parse_n_HTTPHeader(const char *str, size_t len, struct HTTPHeader *out);
 enum parse_HTTPHeader_ResCode parse_HTTPHeader(const char *str, struct HTTPHeader *out);
+
+void dispose_HTTPHeader(struct HTTPHeader *this);
 
 /* HTTPHeader: Read-only methods */
 size_t HTTPHeader_to_string(struct HTTPHeader *this, char *buff, size_t len);
@@ -136,35 +139,17 @@ bool parse_HTTPVersion(const char *str, struct HTTPVersion *out);
 // Call snprintf with prepared params
 size_t HTTPVersion_to_string(struct HTTPVersion this, char *out, size_t out_len);
 
+/* HTTPMethod */
 typedef const char * HTTPMethod;
 
-// Known methods. Keeps inmemory as strings because server can handle any
-// string as method. Unsupported methods is a business layer.
-#define HTTP_METHODS \
-    X(HTTP_METHOD_GET) \
-    X(HTTP_METHOD_POST) \
-    X(HTTP_METHOD_PUT) \
-    X(HTTP_METHOD_PATCH) \
-    X(HTTP_METHOD_DELETE) \
-    X(HTTP_METHOD_HEAD) \
-    X(HTTP_METHOD_OPTIONS)
-
-#define X(name) extern const HTTPMethod name;
-    HTTP_METHODS
-#undef X
-// Not "known" methods is just rare used methods, like TRACE.
-// "Known" methods is memory optimization for avoid allocations
-
-// Check this char ptr lead to static memory strings
-bool HTTPMethod_is_from_known(HTTPMethod this);
-// Check this string is known method. `n` can be zero, if `this` null-terminated.
-bool HTTPMethod_is_known_n(HTTPMethod this, size_t n);
-// Check this string is valid HTTP Method. `n` can be zero, if `this` null-terminated.
+// Check this string is valid HTTP Method.
 bool HTTPMethod_is_valid_n(HTTPMethod this, size_t n);
-// Return ptr to method-str in static mem. Return NULL if is'nt known.
-HTTPMethod HTTPMethod_get_from_known(char *str, size_t len);
+bool HTTPMethod_is_valid(HTTPMethod this);
+
 
 /* HTTPRequest */
+#define HTTP_REQUEST_REPR_FMT REPR_FMT(struct HTTPRequest)
+
 struct HTTPRequest {
     // double const needs to compatibility with in-memory method-strings
     // any can be const, but i too lazy for mark all fields const everytime
@@ -192,6 +177,8 @@ struct HTTPRequest {
     const ARRAY(struct HTTPHeader, headers);
     const ARRAY(void, body);
     const struct HTTPRequesterInfo requester;
+
+    bool _is_disposed;
 };
 
 void dispose_HTTPRequest(struct HTTPRequest *this);
@@ -225,6 +212,10 @@ enum read_http_request_ResCode {
     read_http_request_RequestInvalid,
     // Request too big
     read_http_request_RequestTooBig,
+    // Request URI too long
+    read_http_request_RequestURITooLong,
+    // Content Length is not a number
+    read_http_request_ContentLengthIsNotANumber,
 };
 DEF_RESULT(read_http_request, union read_http_request_ReturnValue);
 

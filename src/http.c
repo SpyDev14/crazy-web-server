@@ -1,4 +1,5 @@
 #include <unistd.h>
+#include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 
@@ -10,6 +11,7 @@
 
 // REQ - Request
 #define REQ_READ_BUFF_SZ 16 * KB
+#define REQ_MAX_URI_LEN 4096
 
 const char *HTTPResponseCode_to_reason_phrase(enum HTTPResponseCode this) {
     switch (this) {
@@ -172,7 +174,7 @@ void dispose_HTTPHeader(struct HTTPHeader *this) {
     this->name = NULL;
     this->value = NULL;
 
-    log(L_DEBUG, L_ARGS, HTTP_HEADER_REPR_FMT, this);
+    log(L_DEBUG, L_ARGS, HTTP_HEADER_REPR_FMT " disposed", this);
 }
 
 /* Read-only methods */
@@ -258,34 +260,24 @@ bool parse_HTTPVersion(const char *str, struct HTTPVersion *out) {
 }
 
 /* HTTPMethod */
-extern const HTTPMethod HTTP_METHOD_GET     = "GET";
-extern const HTTPMethod HTTP_METHOD_POST    = "POST";
-extern const HTTPMethod HTTP_METHOD_PUT     = "PUT";
-extern const HTTPMethod HTTP_METHOD_PATCH   = "PATCH";
-extern const HTTPMethod HTTP_METHOD_DELETE  = "DELETE";
-extern const HTTPMethod HTTP_METHOD_HEAD    = "HEAD";
-extern const HTTPMethod HTTP_METHOD_OPTIONS = "OPTIONS";
-
-#define X(name) name,
-static const HTTPMethod m_HTTP_METHODS_ARR = {
-    HTTP_METHOD_GET,
-};
-#undef X
-
-bool HTTPMethod_is_from_known(HTTPMethod this) {
-}
-
-bool HTTPMethod_is_known_n(HTTPMethod this, size_t n) {
-
-}
-
 bool HTTPMethod_is_valid_n(HTTPMethod this, size_t n) {
+    if (n == 0) {
+        log(L_ERROR, L_ARGS, "n can't be zero");
+        return false;
+    }
 
+    for (const char *c = this; c - this < n; c++)
+        if(!IS_VISIBLE_ASCII(*c))
+            return false;
+
+    return true;
 }
 
-HTTPMethod HTTPMethod_get_from_known(char *str, size_t len) {
-
+bool HTTPMethod_is_valid(HTTPMethod this) {
+    size_t n = strlen(this);
+    return HTTPMethod_is_valid_n(this, n);
 }
+
 
 /* HTTPVersion: Read-only methods */
 size_t HTTPVersion_to_string(struct HTTPVersion this, char *out, size_t out_len) {
@@ -294,10 +286,20 @@ size_t HTTPVersion_to_string(struct HTTPVersion this, char *out, size_t out_len)
     return snprintf(out, out_len, "HTTP/%u.%u", this.major, this.minor);
 }
 
-enum m_ReadRequestState {
-    READ_HEADERS,
-    READ_BODY
-};
+
+/* HTTPRequest */
+void dispose_HTTPRequest(struct HTTPRequest *this) {
+    free(this->method);
+    free(this->uri);
+
+    this->method = NULL;
+    this->uri = NULL;
+
+    for (size_t i = 0; i < this->headers_len; i++)
+        dispose_HTTPHeader(&this->headers[i]);
+
+    log(L_DEBUG, L_ARGS, HTTP_REQUEST_REPR_FMT " disposed", this);
+}
 
 struct read_http_request_Result read_http_request(
     const int client_fd,
@@ -314,7 +316,6 @@ struct read_http_request_Result read_http_request(
     // 1. Read head part to buffer
     // 2. Read body if content-length was given
 
-    enum m_ReadRequestState state = READ_HEADERS;
     size_t bytes_read_total = 0; // For reading result
     struct Vec headers = new_Vec(sizeof(struct HTTPHeader));
     size_t head_len = 0; // with \r\n\r\n
@@ -324,8 +325,8 @@ struct read_http_request_Result read_http_request(
     // Read head from socket (while not found \r\n\r\n)
     while (head_len == 0) {
         void *cursor = buff + bytes_written; //where to write
-        size_t max_read = sizeof(buff - 1 - bytes_written); // -1 for null-term
-        ssize_t bytes_read = read(client_fd, cursor, max_read);
+        size_t max_to_read = sizeof(buff - 1 - bytes_written); // -1 for null-term
+        ssize_t bytes_read = read(client_fd, cursor, max_to_read);
         switch (bytes_read) {
             case -1: return EXTERR(read_http_request, IOReadError, {.error_code = errno});
             case 0:  return ERR(read_http_request, ClientCloseConnection);
@@ -346,35 +347,50 @@ struct read_http_request_Result read_http_request(
         break;
     }
 
+    assert(head_len < sizeof(buff));
+
     size_t content_length = 0; // Getted from content-length header if has
+
     // Parse head
+    #define INVALID_REQUEST_ERR ERR(read_http_request, RequestInvalid)
+
     // 1. Parse METHOD URI VERSION (first line)
     char *curr = buff;
-    #define INVALID_REQUEST_ERR ERR(read_http_request, RequestInvalid)
     {
         char  *method_start, *uri_start, *version_start;
         size_t method_len,    uri_len,    version_len;
 
         method_start = curr;
         while (*curr != ' ') {
-            if (*curr == 0) return INVALID_REQUEST_ERR;
+            if (*curr == 0) return INVALID_REQUEST_ERR; // OOB
             curr++;
         }
         method_len = curr - method_start;
         curr++;
 
+        if (!HTTPMethod_is_valid_n(method_start, method_len))
+            return INVALID_REQUEST_ERR;
+
         uri_start = curr;
         while (*curr != ' ') {
-            if (*curr == 0) return INVALID_REQUEST_ERR;
+            if (*curr == 0) { // OOB
+                if (curr - uri_start > REQ_MAX_URI_LEN)
+                    return ERR(read_http_request, RequestURITooLong);
+                else return INVALID_REQUEST_ERR;
+            }
             curr++;
         }
         uri_len = curr - uri_start;
         curr++;
 
+        if (uri_len > REQ_MAX_URI_LEN)
+            return ERR(read_http_request, RequestURITooLong);
+
         version_start = curr;
         while (*curr != '\r') {
-            // to prevent full-scan if only LF instead CRLF (should be CRLF only)
-            if (*curr == '\n' || *curr == 0) return INVALID_REQUEST_ERR;
+            if (*curr == 0) return INVALID_REQUEST_ERR; // OOB
+            // to prevent full-scan if is LF instead CRLF (should be CRLF only)
+            if (*curr == '\n') return INVALID_REQUEST_ERR;
             curr++;
         }
         version_len = curr - version_start;
@@ -383,21 +399,60 @@ struct read_http_request_Result read_http_request(
         if (*curr != '\n') return INVALID_REQUEST_ERR;
         curr++;
 
-        char *method, *uri;
-        struct HTTPVersion version;
-        if (!parse_n_HTTPVersion(version_start, version_len, &version))
+        if (!parse_n_HTTPVersion(version_start, version_len, &request.http_version))
             return INVALID_REQUEST_ERR;
 
-        if (HTTPMethod_is_from_known())
+        char *method = malloc(method_len + 1);
+        if (method == NULL) return ERR(read_http_request, MemoryOverflow);
+        method[method_len] = 0;
+        request.method = method;
+
+        char *uri = malloc(uri_len + 1);
+        if (uri == NULL) return ERR(read_http_request, MemoryOverflow);
+        uri[uri_len] = 0;
+        request.uri = uri;
     }
 
     // 2. Parse headers
     {
+        while (curr - buff < (head_len - 2)) {
+            // Select line
+            char *header_start = curr;
+            size_t header_len = 0;
 
+            while (*curr != '\r') {
+                if (*curr == 0) return INVALID_REQUEST_ERR; // OOB
+                curr++;
+            }
+
+            header_len = curr - header_start;
+            curr++;
+
+            if (*curr != '\n')
+                return INVALID_REQUEST_ERR;
+
+            struct HTTPHeader header;
+            switch (parse_n_HTTPHeader(header_start, header_len, &header)) {
+                case parse_HTTPHeader_Success: break;
+                case parse_HTTPHeader_MemoryOverflow:
+                    return ERR(read_http_request, MemoryOverflow);
+                case parse_HTTPHeader_InvalidString:
+                    return INVALID_REQUEST_ERR;
+            }
+
+            Vec_push(&headers, &header);
+
+            if (header.name == "Content-Length") {
+                // This project only for x64 where size always 64-bit
+                if (!parse_u64(header.value, &content_length))
+                    return ERR(read_http_request, ContentLengthIsNotANumber);
+            }
+        }
     }
 
     size_t content_read_total = 0; // For check what body has been read
 
+    // now without body reading
 
     union read_http_request_ReturnValue value = {
         .Success = (struct read_http_request_SuccessData){

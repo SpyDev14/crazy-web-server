@@ -3,7 +3,7 @@
 
 
 // inline repr fmt macro for given type
-#define REPR_FMT(T) "<T at %p>"
+#define REPR_FMT(T) "<" #T " at %p>"
 
 // Format params:
 // - separator: "" if type_tag == "", else " "
