@@ -51,6 +51,8 @@ typedef int64_t i64;
 typedef i8 sbyte;
 typedef u8 byte;
 
+#define KB 1024
+
 
 // Maybe only ResCode + T *out param would be better.
 #define DEF_RESULT(func_name, TValue) struct func_name##_Result { \

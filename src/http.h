@@ -97,6 +97,8 @@ struct HTTPHeader {
 };
 
 #define HTTP_HEADER_REPR_FMT REPR_FMT(struct HTTPHeader)
+#define HTTP_HEADER_FMT "%s: %s"
+#define HTTP_HEADER_FMT_ARG(this) this->name, this->value
 
 /* HTTPHeader: Special methods */
 enum parse_HTTPHeader_ResCode {
@@ -110,7 +112,7 @@ enum parse_HTTPHeader_ResCode parse_n_HTTPHeader(const char *str, size_t len, st
 enum parse_HTTPHeader_ResCode parse_HTTPHeader(const char *str, struct HTTPHeader *out);
 
 /* HTTPHeader: Read-only methods */
-size_t HTTPHeader_to_string(struct HTTPHeader this, char *buff, size_t buff_len);
+size_t HTTPHeader_to_string(struct HTTPHeader *this, char *buff, size_t len);
 
 
 struct HTTPRequesterInfo {
@@ -132,11 +134,42 @@ bool parse_HTTPVersion(const char *str, struct HTTPVersion *out);
 // Max len of HTTPVersion string
 #define HTTP_VERSION_STR_LEN sizeof("HTTP/255.255")
 // Call snprintf with prepared params
-size_t HTTPVersion_to_string(struct HTTPVersion this, char *buff, size_t buff_len);
+size_t HTTPVersion_to_string(struct HTTPVersion this, char *out, size_t out_len);
+
+typedef const char * HTTPMethod;
+
+// Known methods. Keeps inmemory as strings because server can handle any
+// string as method. Unsupported methods is a business layer.
+#define HTTP_METHODS \
+    X(HTTP_METHOD_GET) \
+    X(HTTP_METHOD_POST) \
+    X(HTTP_METHOD_PUT) \
+    X(HTTP_METHOD_PATCH) \
+    X(HTTP_METHOD_DELETE) \
+    X(HTTP_METHOD_HEAD) \
+    X(HTTP_METHOD_OPTIONS)
+
+#define X(name) extern const HTTPMethod name;
+    HTTP_METHODS
+#undef X
+// Not "known" methods is just rare used methods, like TRACE.
+// "Known" methods is memory optimization for avoid allocations
+
+// Check this char ptr lead to static memory strings
+bool HTTPMethod_is_from_known(HTTPMethod this);
+// Check this string is known method. `n` can be zero, if `this` null-terminated.
+bool HTTPMethod_is_known_n(HTTPMethod this, size_t n);
+// Check this string is valid HTTP Method. `n` can be zero, if `this` null-terminated.
+bool HTTPMethod_is_valid_n(HTTPMethod this, size_t n);
+// Return ptr to method-str in static mem. Return NULL if is'nt known.
+HTTPMethod HTTPMethod_get_from_known(char *str, size_t len);
 
 /* HTTPRequest */
 struct HTTPRequest {
-    const char *method;
+    // double const needs to compatibility with in-memory method-strings
+    // any can be const, but i too lazy for mark all fields const everytime
+    // (i can mark a struct as const, but it is not a point, okay?)
+    HTTPMethod method;
     // Defined as URI by HTTP protocol.
     // URI: Uniform Resource Identifier - URL-s + URN-s
     // URL: Uniform Resource Locator.
@@ -160,6 +193,8 @@ struct HTTPRequest {
     const ARRAY(void, body);
     const struct HTTPRequesterInfo requester;
 };
+
+void dispose_HTTPRequest(struct HTTPRequest *this);
 
 /* reading request from socket */
 struct read_http_request_SuccessData {
@@ -188,6 +223,8 @@ enum read_http_request_ResCode {
     read_http_request_MemoryOverflow,
     // Request violate HTTP protocol
     read_http_request_RequestInvalid,
+    // Request too big
+    read_http_request_RequestTooBig,
 };
 DEF_RESULT(read_http_request, union read_http_request_ReturnValue);
 
