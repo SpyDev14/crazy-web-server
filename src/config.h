@@ -15,7 +15,7 @@ struct Config {
 /* Special funcs */
 // NO THREAD SAFE
 struct Config new_Config_from_env(const char *prefix);
-struct Config new_Config_from_command_line(int argc, const char *argv[]);
+struct Config new_Config_from_command_line(int argc, const char * const argv[]);
 
 /* Read-only methods */
 // Update values in copy of first config by values from other config if set.

@@ -87,8 +87,8 @@ enum Vec_push_ResCode {
     Vec_push_IsDisposed,
     Vec_push_MemoryOverflow,
 };
-enum Vec_push_ResCode Vec_push(struct Vec *this, void* item);
-enum Vec_push_ResCode Vec_push_several(struct Vec *this, void *items, size_t items_count);
+[[nodiscard]] enum Vec_push_ResCode Vec_push(struct Vec *this, void* item);
+[[nodiscard]] enum Vec_push_ResCode Vec_push_several(struct Vec *this, void *items, size_t items_count);
 
 // Remove all items without deallocating
 void Vec_clear(struct Vec *this);

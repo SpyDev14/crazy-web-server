@@ -315,20 +315,21 @@ void dispose_HTTPRequest(struct HTTPRequest *this) {
     for (size_t i = 0; i < this->headers_len; i++)
         dispose_HTTPHeader((void *)&this->headers[i]);
     free(this->headers);
+    this->headers_len = 0;
+
+    if (this->body != NULL)
+        free(this->body);
+    this->body_len = 0;
 
     LOG_SUCCESSFUL_DISPOSED(HTTP_REQUEST_REPR_FMT, this);
 }
 
 struct read_http_request_Result read_http_request(
     int client_fd,
-    const struct sockaddr_in *client_addr,
-    FreeablesVec *objects_to_free
+    const struct HTTPRequesterInfo *client_info
 ) {
     struct HTTPRequest request = {
-        .requester = {
-            .ip = client_addr->sin_addr.s_addr,
-            .port = client_addr->sin_port
-        },
+        .requester = *client_info,
     };
 
     // 1. Read head part to buffer
@@ -481,7 +482,16 @@ struct read_http_request_Result read_http_request(
 
     size_t content_read_total = 0; // For check what body has been read
 
-    // now without body
+    // now without reading body
+    request.body_len = 0;
+    request.body = NULL;
+
+    #if DEBUG
+    if (request.body == NULL || request.body_len == 0) {
+        assert(request.body == NULL);
+        assert(request.body_len == 0);
+    }
+    #endif
 
     union read_http_request_ReturnValue value = {
         .Success = (struct read_http_request_SuccessData){

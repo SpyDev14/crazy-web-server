@@ -7,9 +7,12 @@
 #include "src/freeable.h"
 #include "src/common.h"
 
-
+// Enum here is bad idea because status code is just a number
+// But this project not parse Responses, so it isn't problem.
+// Anyway, better way is `typedef u16 HTTPResponseCode` +
+// `const static HTTPResponseCode HTTP_... = ...;`
 enum HTTPResponseCode : u16 {
-    // 1xx: Informational
+    /* 1xx: Informational */
     HTTP_100_CONTINUE = 100,
     HTTP_101_SWITCHING_PROTOCOLS = 101,
     HTTP_102_PROCESSING = 102,
@@ -18,7 +21,7 @@ enum HTTPResponseCode : u16 {
     // Nginx & Apache already support this.
     HTTP_104_UPLOAD_RESUMPTION_SUPPORTED = 104,
 
-    // 2xx: Success
+    /* 2xx: Success */
     HTTP_200_OK = 200,
     HTTP_201_CREATED = 201,
     HTTP_202_ACCEPTED = 202,
@@ -30,7 +33,7 @@ enum HTTPResponseCode : u16 {
     HTTP_208_ALREADY_REPORTED = 208,
     HTTP_226_IM_USED = 226,
 
-    // 3xx: Redirection
+    /* 3xx: Redirection */
     HTTP_300_MULTIPLE_CHOICES = 300,
     HTTP_301_MOVED_PERMANENTLY = 301,
     HTTP_302_FOUND = 302,
@@ -41,7 +44,7 @@ enum HTTPResponseCode : u16 {
     HTTP_307_TEMPORARY_REDIRECT = 307,
     HTTP_308_PERMANENT_REDIRECT = 308,
 
-    // 4xx: Client Error
+    /* 4xx: Client Error */
     HTTP_400_BAD_REQUEST = 400,
     HTTP_401_UNAUTHORIZED = 401,
     HTTP_402_PAYMENT_REQUIRED = 402,
@@ -74,7 +77,7 @@ enum HTTPResponseCode : u16 {
     HTTP_431_REQUEST_HEADER_FIELDS_TOO_LARGE = 431,
     HTTP_451_UNAVAILABLE_FOR_LEGAL_REASONS = 451,
 
-    // 5xx: Server Error
+    /* 5xx: Server Error */
     HTTP_500_INTERNAL_SERVER_ERROR = 500,
     HTTP_501_NOT_IMPLEMENTED = 501,
     HTTP_502_BAD_GATEWAY = 502,
@@ -109,7 +112,9 @@ enum parse_HTTPHeader_ResCode {
 };
 
 // Awaited format: "Name: Value"; allowed multiply whitespaces around Value
+[[nodiscard]]
 enum parse_HTTPHeader_ResCode parse_n_HTTPHeader(const char *str, size_t len, struct HTTPHeader *out);
+[[nodiscard]]
 enum parse_HTTPHeader_ResCode parse_HTTPHeader(const char *str, struct HTTPHeader *out);
 
 void dispose_HTTPHeader(struct HTTPHeader *this);
@@ -130,8 +135,8 @@ struct HTTPVersion {
 
 /* HTTPVersion: Special functions */
 // Awaited format: "HTTP/<major: 1-255>[.<minor: 0-255>]"
-bool parse_n_HTTPVersion(const char *str, size_t len, struct HTTPVersion *out);
-bool parse_HTTPVersion(const char *str, struct HTTPVersion *out);
+[[nodiscard]] bool parse_n_HTTPVersion(const char *str, size_t len, struct HTTPVersion *out);
+[[nodiscard]] bool parse_HTTPVersion(const char *str, struct HTTPVersion *out);
 
 /* HTTPVersion: Read-only methods */
 // Max len of HTTPVersion string
@@ -170,8 +175,8 @@ struct HTTPRequest {
     //      used for links to science articles ("doi" namespace).
     const char *uri; // allocated
     struct HTTPVersion http_version;
-    const ARRAY(struct HTTPHeader, headers); // allocated
-    const ARRAY(void, body); // allocated
+    ARRAY(const struct HTTPHeader, headers); // allocated
+    ARRAY(const byte, body); // allocated
     struct HTTPRequesterInfo requester;
 };
 
@@ -213,10 +218,10 @@ enum read_http_request_ResCode {
 };
 DEF_RESULT(read_http_request, union read_http_request_ReturnValue);
 
+[[nodiscard]]
 struct read_http_request_Result read_http_request(
     int client_fd,
-    const struct sockaddr_in *client_addr,
-    FreeablesVec *objects_to_free
+    const struct HTTPRequesterInfo *client_info
 );
 
 
@@ -224,6 +229,6 @@ struct read_http_request_Result read_http_request(
 struct HTTPResponse {
     struct HTTPVersion http_version;
     enum HTTPResponseCode code;
-    const ARRAY(struct HTTPHeader, headers);
-    const ARRAY(void, body);
+    ARRAY(const struct HTTPHeader, headers);
+    ARRAY(const byte, body);
 };

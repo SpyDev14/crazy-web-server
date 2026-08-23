@@ -54,6 +54,6 @@ bool parse_n_i64(const char *str, size_t len, i64 *out) {
     return true;
 }
 
-bool parse_i64(const char *str, u64 *out) {
+bool parse_i64(const char *str, i64 *out) {
     IMPL_PARSE_NULL_TERMINATED_STR(str, out, parse_n_i64, len)
 }

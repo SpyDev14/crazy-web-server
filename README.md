@@ -154,15 +154,15 @@ struct foo_Result foo(void data[], size_t data_len, size_t i) {
 			- `struct Vec new_Vec_with_buffer(size_t item_size, void *buffer, size_t buffer_capacity)`
 			- `struct Config new_Config_from_command_line(int argc, char *argv[])`
 	- **Парсеры**:
-		- Похожи на конструкторы, но возвращают `bool` (`true` - успешно, `false` - не валидная строка) и новый экземпляр структуры в out параметре (указатель). Допустимо 2 формата для строк *с* `\0` на конце и *без*. (реализовывать оба не обязательно).
+		- Похожи на конструкторы, но возвращают `bool` (`true` - успешно, `false` - не валидная строка) и новый экземпляр структуры в out параметре (указатель). Допустимо 2 формата для строк *с* `\0` на конце и *без*. (реализовывать оба не обязательно). Обязательно должны быть объявлены с атрибутом `[[nodiscard]]` (нельзя игнорировать возвращаемое значение).
 		- **Форматы**:
 			- `bool parse_<T>[_<subname>](char str[], T *out)`
 			- `bool parse_n_<T>[_<subname>](char str[], size_t len, T *out)`
 		- **Примеры**:
-			- `bool parse_HTTPVersion(char str[], struct HTTPVersion *out)`
-			- `bool parse_n_HTTPVersion(char str[], size_t len, struct HTTPVersion *out)`
-			- `long parse_long(char str[], long *out)`
-			- `long parse_n_long(char str[], size_t len, long *out)`
+			- `[[nodiscard]] bool parse_HTTPVersion(char str[], struct HTTPVersion *out)`
+			- `[[nodiscard]] bool parse_n_HTTPVersion(char str[], size_t len, struct HTTPVersion *out)`
+			- `[[nodiscard]] bool parse_long(char str[], long *out)`
+			- `[[nodiscard]] bool parse_n_long(char str[], size_t len, long *out)`
 	- **Деструкторы**:
 		- Разрушают объект, освобождая ресурсы (аллоцированную память, открытые файлы и т.д.). После уничтожения объект должен быть не доступен для взаимодействия.
 		- **Формат**: `void dispose_<T>(T *this)`
@@ -194,4 +194,6 @@ struct foo_Result foo(void data[], size_t data_len, size_t i) {
 2. Св-ва могут быть спокойно заменены на обычные read-only и мутирующие методы. Также вычисляемые значения в языках без свойств обычно именуют без каких-либо доп. слов, например метод `level()` для `GameSession` в тетрисе для вычисления текущего уровня по набранным очкам, без `calculate`, `get` и т.д.
 3. "Специальные" функции тоже могут быть заменены на обычные. Например `new_Vec` -> `Vec_new`, `dispose_Vec` -> `Vec_dispose`
 
-### При работе с Result
+## Работа с Result
+<!-- TODO: написать про код, DEF_RESULT, ERR, EXTERR, OK, Setable-варианты и т.д -->
+Все функции возвращающие Result или только ResCode должны быть помечены атрибутом `[[nodiscard]]` (нельзя игнорировать возвращаемое значение).

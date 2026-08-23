@@ -24,7 +24,7 @@ struct Config new_Config_from_env(const char *prefix) {
     return conf;
 }
 
-struct Config new_Config_from_command_line(int argc, const char *argv[]) {
+struct Config new_Config_from_command_line(int argc, const char * const argv[]) {
     struct Config conf = {0};
     log(L_ERROR, L_ARGS, "not implemented");
     return conf;
