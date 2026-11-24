@@ -75,7 +75,7 @@ int foo(int x) {
 		return 42;
 	...
 	return x * 2;
-	#undef l_SOMETHING
+	#undef l_BAR
 }
 ```
 
